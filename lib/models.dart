@@ -1,6 +1,39 @@
 // models.dart - All data models in one flat file
 import 'package:flutter/foundation.dart';
 
+String _backendBaseUrl() {
+  const apiBaseUrlOverride = String.fromEnvironment('API_BASE_URL');
+  if (apiBaseUrlOverride.isNotEmpty) {
+    var cleaned = apiBaseUrlOverride.replaceFirst(RegExp(r'/+$'), '');
+    if (cleaned.endsWith('/api')) {
+      cleaned = cleaned.substring(0, cleaned.length - 4);
+    }
+    return cleaned;
+  }
+
+  return kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+}
+
+String _toImageUrl(String raw) {
+  var value = raw.trim();
+  if (value.isEmpty) return value;
+  if (value.startsWith('http://') || value.startsWith('https://')) return value;
+
+  value = value
+      .replaceAll('\\', '/')
+      .replaceAll(RegExp(r'/{2,}'), '/')
+      .replaceFirst(RegExp(r'^/'), '');
+
+  if (value.startsWith('assets/images/')) {
+    value = value.substring('assets/images/'.length);
+  }
+  if (value.startsWith('images/')) {
+    value = value.substring('images/'.length);
+  }
+
+  return '${_backendBaseUrl()}/images/$value';
+}
+
 class User {
   final String id;
   String name;
@@ -33,7 +66,9 @@ class User {
       name: json['name']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? json['telepon']?.toString() ?? '',
-      avatarUrl: json['avatar']?.toString() ?? json['avatar_url']?.toString() ?? 'https://i.pravatar.cc/150?img=3',
+      avatarUrl: json['avatar']?.toString() ??
+          json['avatar_url']?.toString() ??
+          'https://i.pravatar.cc/150?img=3',
       address: json['address']?.toString() ?? json['alamat']?.toString() ?? '',
       password: '',
       ktpImage: json['ktp_image']?.toString(),
@@ -105,6 +140,7 @@ class Product {
       if (value is int) return value.toDouble();
       return double.tryParse(value.toString()) ?? 0;
     }
+
     int toInt(dynamic value) {
       if (value == null) return 0;
       if (value is int) return value;
@@ -116,33 +152,43 @@ class Product {
       categoryName = toStringSafe(json['category']['name']);
     }
 
-    String sellerNameStr = toStringSafe(json['seller_name'] ?? json['store_name']);
-    String sellerCityStr = toStringSafe(json['seller_city'] ?? json['store_city']);
+    String sellerNameStr =
+        toStringSafe(json['seller_name'] ?? json['store_name']);
+    String sellerCityStr =
+        toStringSafe(json['seller_city'] ?? json['store_city']);
     if (json['seller'] is Map) {
-      sellerNameStr = toStringSafe(json['seller']['name']) != '' ? toStringSafe(json['seller']['name']) : sellerNameStr;
-      sellerCityStr = toStringSafe(json['seller']['city']) != '' ? toStringSafe(json['seller']['city']) : sellerCityStr;
+      sellerNameStr = toStringSafe(json['seller']['name']) != ''
+          ? toStringSafe(json['seller']['name'])
+          : sellerNameStr;
+      sellerCityStr = toStringSafe(json['seller']['city']) != ''
+          ? toStringSafe(json['seller']['city'])
+          : sellerCityStr;
     }
 
-    var imageUrl = json['image']?.toString() ?? json['gambar']?.toString() ?? '';
-    if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
-      // Normalize path and use backend public asset base URL, not /storage.
-      final cleanedPath = imageUrl.replaceAll('\\', '/').replaceAll(RegExp(r'/{2,}'), '/').replaceFirst(RegExp(r'^/'), '');
-      final baseUrl = kIsWeb ? 'http://127.0.0.1:8000/' : 'http://10.0.2.2:8000/';
-      imageUrl = '$baseUrl$cleanedPath';
-    }
-    final isRentable = json['is_rental'] == 1 || json['is_rental'] == true || json['is_rentable'] == true;
+    var imageUrl =
+        json['image']?.toString() ?? json['gambar']?.toString() ?? '';
+    imageUrl = _toImageUrl(imageUrl);
+    final isRentable = json['is_rental'] == 1 ||
+        json['is_rental'] == true ||
+        json['is_rentable'] == true;
 
     return Product(
       id: toStringSafe(json['id']),
       name: toStringSafe(json['name'] ?? json['nama_produk']),
       description: toStringSafe(json['description'] ?? json['deskripsi']),
       price: toDouble(json['price'] ?? json['harga'] ?? json['buy_price']),
-      rentalPrice: json['rent_price'] != null ? toDouble(json['rent_price']) : null,
-      imageUrl: imageUrl.isNotEmpty ? imageUrl : 'assets/images/meja-kayu-dengan-bangku-yang-dikelilingi-oleh-pegunungan-alpen-italia-yang-tertutup-tanaman-hijau-di-bawah-sinar-matahari_181624-28262.avif',
+      rentalPrice:
+          json['rent_price'] != null ? toDouble(json['rent_price']) : null,
+      imageUrl: imageUrl.isNotEmpty
+          ? imageUrl
+          : 'assets/images/meja-kayu-dengan-bangku-yang-dikelilingi-oleh-pegunungan-alpen-italia-yang-tertutup-tanaman-hijau-di-bawah-sinar-matahari_181624-28262.avif',
       category: categoryName,
       rating: toDouble(json['rating'] ?? 0),
       reviewCount: toInt(json['reviews_count'] ?? json['reviewed_by'] ?? 0),
-      isAvailable: (json['status']?.toString().toLowerCase() ?? '') == 'approved' || json['status'] == 1 || json['is_available'] == true,
+      isAvailable:
+          (json['status']?.toString().toLowerCase() ?? '') == 'approved' ||
+              json['status'] == 1 ||
+              json['is_available'] == true,
       isRentable: isRentable,
       sellerName: sellerNameStr,
       sellerCity: sellerCityStr,
@@ -217,7 +263,8 @@ class Order {
       return DateTime.tryParse(value.toString()) ?? DateTime.now();
     }
 
-    final details = json['order_details'] ?? json['details'] ?? json['orderDetails'] ?? [];
+    final details =
+        json['order_details'] ?? json['details'] ?? json['orderDetails'] ?? [];
     final items = <CartItem>[];
     if (details is List) {
       for (final item in details) {
@@ -234,8 +281,12 @@ class Order {
       status: json['status']?.toString() ?? '',
       createdAt: parseDate(json['created_at'] ?? json['createdAt']),
       courier: json['kurir']?.toString() ?? json['courier']?.toString() ?? '',
-      trackingNumber: json['no_resi']?.toString() ?? json['tracking_number']?.toString() ?? '',
-      address: json['shipping_address']?.toString() ?? json['address']?.toString() ?? '',
+      trackingNumber: json['no_resi']?.toString() ??
+          json['tracking_number']?.toString() ??
+          '',
+      address: json['shipping_address']?.toString() ??
+          json['address']?.toString() ??
+          '',
       paymentProof: json['bukti_pembayaran']?.toString(),
     );
   }
@@ -317,15 +368,19 @@ class Review {
         r = double.tryParse(json['rating'].toString()) ?? 0;
       }
     }
-    
+
     return Review(
       id: json['id']?.toString() ?? '',
-      userName: json['user_name']?.toString() ?? json['name']?.toString() ?? 'Pengguna',
-      avatarUrl: json['user_avatar']?.toString() ?? json['avatar']?.toString() ?? 'https://i.pravatar.cc/150?img=3',
+      userName: json['user_name']?.toString() ??
+          json['name']?.toString() ??
+          'Pengguna',
+      avatarUrl: json['user_avatar']?.toString() ??
+          json['avatar']?.toString() ??
+          'https://i.pravatar.cc/150?img=3',
       rating: r,
       comment: json['comment']?.toString() ?? '',
-      createdAt: json['created_at'] != null 
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now() 
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
     );
   }
@@ -371,14 +426,20 @@ class CurrencyFormat {
       return 'Rp ${(price / 1000000).toStringAsFixed(1)}jt';
     }
     return 'Rp ${price.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    )}';
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        )}';
   }
 }
 
 class AppConstants {
   static final List<String> couriers = [
-    'JNE', 'TIKI', 'SiCepat', 'Anteraja', 'J&T Express', 'GoSend', 'GrabExpress'
+    'JNE',
+    'TIKI',
+    'SiCepat',
+    'Anteraja',
+    'J&T Express',
+    'GoSend',
+    'GrabExpress'
   ];
 }

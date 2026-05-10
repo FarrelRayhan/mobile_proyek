@@ -6,9 +6,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models.dart';
 
 class ApiService {
+  static const String _apiBaseUrlOverride =
+      String.fromEnvironment('API_BASE_URL');
+
   // Untuk Flutter web, gunakan localhost.
   // Untuk emulator Android, gunakan 10.0.2.2.
-  static String get baseUrl => kIsWeb ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+  static String get baseUrl {
+    if (_apiBaseUrlOverride.isNotEmpty) {
+      final cleaned = _apiBaseUrlOverride.replaceFirst(RegExp(r'/+$'), '');
+      return cleaned.endsWith('/api') ? cleaned : '$cleaned/api';
+    }
+
+    return kIsWeb ? 'http://localhost:8000/api' : 'http://10.0.2.2:8000/api';
+  }
 
   static String? _token;
 
@@ -60,7 +70,8 @@ class ApiService {
     throw ApiException(message.toString());
   }
 
-  static Future<User> register(String name, String email, String password) async {
+  static Future<User> register(
+      String name, String email, String password) async {
     final uri = Uri.parse('$baseUrl/register');
     final response = await http.post(
       uri,
@@ -157,7 +168,8 @@ class ApiService {
         throw ApiException(msg.toString());
       } catch (e) {
         if (e is ApiException) throw e;
-        throw ApiException('Gagal menambahkan ke keranjang (${response.statusCode})');
+        throw ApiException(
+            'Gagal menambahkan ke keranjang (${response.statusCode})');
       }
     }
   }
@@ -209,7 +221,8 @@ class ApiService {
     }
   }
 
-  static Future<List<Product>> fetchProducts({String? category, String? search}) async {
+  static Future<List<Product>> fetchProducts(
+      {String? category, String? search}) async {
     final params = <String, String>{};
     if (category != null && category.isNotEmpty && category != 'Semua') {
       params['category'] = category;
@@ -223,7 +236,9 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = body['data'] as List<dynamic>;
-      return data.map((item) => Product.fromJson(item as Map<String, dynamic>)).toList();
+      return data
+          .map((item) => Product.fromJson(item as Map<String, dynamic>))
+          .toList();
     }
 
     throw ApiException(body['message']?.toString() ?? 'Gagal memuat produk');
@@ -236,7 +251,9 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = body['data'] as List<dynamic>;
-      return data.map((item) => Order.fromJson(item as Map<String, dynamic>)).toList();
+      return data
+          .map((item) => Order.fromJson(item as Map<String, dynamic>))
+          .toList();
     }
 
     throw ApiException(body['message']?.toString() ?? 'Gagal memuat pesanan');
@@ -265,7 +282,8 @@ class ApiService {
     request.fields['receiver_name'] = receiverName;
     request.fields['shipping_address'] = address;
     request.fields['shipping_city'] = shippingCity ?? 'Kota Tidak Diketahui';
-    request.fields['shipping_district'] = shippingDistrict ?? 'Kecamatan Tidak Diketahui';
+    request.fields['shipping_district'] =
+        shippingDistrict ?? 'Kecamatan Tidak Diketahui';
     request.fields['shipping_postal_code'] = '00000';
     request.fields['shipping_phone'] = phone;
     request.fields['metode_pembayaran'] = paymentMethod;
@@ -289,7 +307,8 @@ class ApiService {
       request.files.add(http.MultipartFile.fromBytes(
         'bukti_pembayaran',
         bytes,
-        filename: paymentProofFile.name.isEmpty ? 'bukti.jpg' : paymentProofFile.name,
+        filename:
+            paymentProofFile.name.isEmpty ? 'bukti.jpg' : paymentProofFile.name,
       ));
     }
 
@@ -328,7 +347,9 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = body['data'] as List<dynamic>;
-      return data.map((item) => Review.fromJson(item as Map<String, dynamic>)).toList();
+      return data
+          .map((item) => Review.fromJson(item as Map<String, dynamic>))
+          .toList();
     }
     return [];
   }
