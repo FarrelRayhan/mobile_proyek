@@ -34,6 +34,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     super.dispose();
   }
 
+  String _formatDate(DateTime dt) {
+    const months = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
+    ];
+    return '${dt.day} ${months[dt.month]} ${dt.year}';
+  }
+
   void _showRentalDialog() {
     showModalBottomSheet(
       context: context,
@@ -45,10 +64,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
           final days = endDate.difference(startDate).inDays;
           Navigator.pop(context);
           context.read<AppState>().addToRentalCart(
-            widget.product,
-            startDate,
-            endDate,
-          );
+                widget.product,
+                startDate,
+                endDate,
+              );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -327,18 +346,78 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                             const SizedBox(height: 12),
                             _InfoRow(
                                 label: 'Stok', value: '${p.stock} tersedia'),
-                            _InfoRow(
-                                label: 'Kategori', value: p.category),
+                            _InfoRow(label: 'Kategori', value: p.category),
                             _InfoRow(
                                 label: 'Status',
                                 value: p.isAvailable ? 'Tersedia' : 'Habis'),
                           ],
                         ),
                         // Reviews
-                        const EmptyState(
-                          icon: Icons.rate_review_outlined,
-                          title: 'Belum ada ulasan',
-                          subtitle: 'Jadilah yang pertama memberikan ulasan untuk produk ini.',
+                        FutureBuilder<List<Review>>(
+                          future: context
+                              .read<AppState>()
+                              .fetchProductReviews(p.id),
+                          builder: (context, snap) {
+                            if (snap.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                  child: CircularProgressIndicator());
+                            }
+                            final reviews = snap.data ?? [];
+                            if (reviews.isEmpty) {
+                              return const EmptyState(
+                                icon: Icons.rate_review_outlined,
+                                title: 'Belum ada ulasan',
+                                subtitle:
+                                    'Jadilah yang pertama memberikan ulasan untuk produk ini.',
+                              );
+                            }
+                            return ListView.separated(
+                              padding: const EdgeInsets.only(top: 8),
+                              itemCount: reviews.length,
+                              separatorBuilder: (_, __) => const Divider(),
+                              itemBuilder: (_, i) {
+                                final r = reviews[i];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                      backgroundImage:
+                                          NetworkImage(r.avatarUrl)),
+                                  title: Row(
+                                    children: [
+                                      Text(r.userName,
+                                          style: GoogleFonts.plusJakartaSans(
+                                              fontWeight: FontWeight.w700)),
+                                      const SizedBox(width: 8),
+                                      Row(
+                                          children: List.generate(
+                                              5,
+                                              (j) => Icon(
+                                                  j < r.rating
+                                                      ? Icons.star_rounded
+                                                      : Icons
+                                                          .star_border_rounded,
+                                                  size: 14,
+                                                  color: AppTheme.accentWarm))),
+                                    ],
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const SizedBox(height: 6),
+                                      Text(r.comment,
+                                          style: GoogleFonts.plusJakartaSans()),
+                                      const SizedBox(height: 6),
+                                      Text(_formatDate(r.createdAt),
+                                          style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 11,
+                                              color: AppTheme.textLight)),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -376,7 +455,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                         borderRadius: BorderRadius.circular(14)),
                   ),
                   onPressed: () {
-                    final startDate = DateTime.now().add(const Duration(days: 1));
+                    final startDate =
+                        DateTime.now().add(const Duration(days: 1));
                     final endDate = startDate.add(const Duration(days: 2));
                     state.addToRentalCart(widget.product, startDate, endDate);
                     Navigator.push(
@@ -483,8 +563,7 @@ class _RentalBottomSheet extends StatefulWidget {
   final Product product;
   final Function(DateTime startDate, DateTime endDate) onConfirm;
 
-  const _RentalBottomSheet(
-      {required this.product, required this.onConfirm});
+  const _RentalBottomSheet({required this.product, required this.onConfirm});
 
   @override
   State<_RentalBottomSheet> createState() => _RentalBottomSheetState();
@@ -564,7 +643,7 @@ class _RentalBottomSheetState extends State<_RentalBottomSheet> {
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // Tanggal Mulai Penyewaan
           Text(
             'Tanggal Mulai Penyewaan',
@@ -585,7 +664,7 @@ class _RentalBottomSheetState extends State<_RentalBottomSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today, 
+                  const Icon(Icons.calendar_today,
                       color: AppTheme.primary, size: 20),
                   const SizedBox(width: 12),
                   Text(
@@ -597,14 +676,13 @@ class _RentalBottomSheetState extends State<_RentalBottomSheet> {
                     ),
                   ),
                   const Spacer(),
-                  const Icon(Icons.arrow_drop_down, 
-                      color: AppTheme.textLight),
+                  const Icon(Icons.arrow_drop_down, color: AppTheme.textLight),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 20),
-          
+
           // Durasi Penyewaan
           Text(
             'Durasi Penyewaan',
@@ -649,7 +727,7 @@ class _RentalBottomSheetState extends State<_RentalBottomSheet> {
               ),
             ],
           ),
-          
+
           // Tanggal Selesai
           const SizedBox(height: 12),
           Text(
@@ -691,7 +769,8 @@ class _RentalBottomSheetState extends State<_RentalBottomSheet> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () => widget.onConfirm(_startDate, _startDate.add(Duration(days: _days))),
+              onPressed: () => widget.onConfirm(
+                  _startDate, _startDate.add(Duration(days: _days))),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.accent,
               ),

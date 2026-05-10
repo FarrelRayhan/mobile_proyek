@@ -129,6 +129,28 @@ class _OrderCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            StarRating(rating: item.product.rating, size: 12),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${item.product.rating.toStringAsFixed(1)}',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              ' (${item.product.reviewCount})',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                color: AppTheme.textLight,
+                              ),
+                            ),
+                          ],
+                        ),
                         Text(
                           '${item.quantity}x • ${CurrencyFormat.formatPrice(item.product.price)}',
                           style: GoogleFonts.plusJakartaSans(
@@ -136,6 +158,42 @@ class _OrderCard extends StatelessWidget {
                             color: AppTheme.textSecondary,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        // Show user's review for this order item if present
+                        Builder(builder: (ctx) {
+                          final s = ctx.read<AppState>();
+                          final review =
+                              s.getOrderItemReview(order.id, item.product.id);
+                          if (review == null) return const SizedBox.shrink();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: List.generate(
+                                    5,
+                                    (i) => Icon(
+                                          i < review.rating
+                                              ? Icons.star_rounded
+                                              : Icons.star_border_rounded,
+                                          size: 14,
+                                          color: AppTheme.accentWarm,
+                                        )),
+                              ),
+                              if (review.comment.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  review.comment,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          );
+                        }),
                       ],
                     ),
                   ),
@@ -186,7 +244,23 @@ class _OrderCard extends StatelessWidget {
               ),
               Row(
                 children: [
-                  if (order.status == 'Dikirim') ...[
+                  if (order.status.toLowerCase() == 'menunggu') ...[
+                    ElevatedButton(
+                      onPressed: () => _showPaymentProofDialog(
+                          context, context.read<AppState>(), order.id),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        textStyle: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      child: const Text('Upload Bukti'),
+                    ),
+                  ],
+                  if (order.status.toLowerCase() == 'dikirim') ...[
                     ElevatedButton(
                       onPressed: () => state.confirmReceived(order.id),
                       style: ElevatedButton.styleFrom(
@@ -200,7 +274,7 @@ class _OrderCard extends StatelessWidget {
                       child: const Text('Terima Barang'),
                     ),
                   ],
-                  if (order.status == 'Selesai') ...[
+                  if (order.status.toLowerCase() == 'selesai') ...[
                     OutlinedButton(
                       onPressed: () => _showReviewDialog(context, order),
                       style: OutlinedButton.styleFrom(
@@ -227,10 +301,81 @@ class _OrderCard extends StatelessWidget {
 
   String _formatDate(DateTime dt) {
     const months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
     ];
     return '${dt.day} ${months[dt.month]} ${dt.year}';
+  }
+
+  void _showPaymentProofDialog(
+      BuildContext context, AppState state, String orderId) {
+    final _ctrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          'Upload Bukti Pembayaran',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Silakan upload bukti pembayaran dengan memasukkan URL gambar atau informasi pembayaran.',
+              style: GoogleFonts.plusJakartaSans(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _ctrl,
+              decoration: InputDecoration(
+                hintText: 'Masukkan URL bukti pembayaran',
+                filled: true,
+                fillColor: AppTheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (_ctrl.text.isNotEmpty) {
+                // Gunakan uploadPaymentProof di AppState (jika menangani orderId biasa)
+                // Jika app_state hanya mengubah _rentalOrders, kita perlu memanggil API langsung
+                // Untuk sementara, panggil state.uploadPaymentProof atau yang sesuai
+                state.uploadPaymentProof(orderId, _ctrl.text);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Bukti pembayaran berhasil diupload!')),
+                );
+              }
+            },
+            child: const Text('Upload'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showReviewDialog(BuildContext context, Order order) {
@@ -242,8 +387,8 @@ class _OrderCard extends StatelessWidget {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setState) => Dialog(
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -265,8 +410,7 @@ class _OrderCard extends StatelessWidget {
                     children: List.generate(
                       5,
                       (i) => GestureDetector(
-                        onTap: () =>
-                            setState(() => _rating = i + 1.0),
+                        onTap: () => setState(() => _rating = i + 1.0),
                         child: Icon(
                           i < _rating
                               ? Icons.star_rounded
@@ -292,47 +436,56 @@ class _OrderCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : () async {
-                      setState(() => _isSubmitting = true);
-                      final state = context.read<AppState>();
-                      bool success = true;
+                    onPressed: _isSubmitting
+                        ? null
+                        : () async {
+                            setState(() => _isSubmitting = true);
+                            final state = context.read<AppState>();
+                            bool success = true;
 
-                      for (var item in order.items) {
-                        final error = await state.submitReview(
-                          orderId: order.id,
-                          productId: item.product.id,
-                          rating: _rating.toInt(),
-                          comment: _ctrl.text,
-                        );
-                        if (error != null && error != 'The order id has already been taken.') {
-                          // Ignore if already reviewed (some APIs return duplicate error)
-                          success = false;
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-                          }
-                          break;
-                        }
-                      }
+                            for (var item in order.items) {
+                              final error = await state.submitReview(
+                                orderId: order.id,
+                                productId: item.product.id,
+                                rating: _rating.toInt(),
+                                comment: _ctrl.text,
+                              );
+                              if (error != null &&
+                                  error !=
+                                      'The order id has already been taken.') {
+                                // Ignore if already reviewed (some APIs return duplicate error)
+                                success = false;
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(error)));
+                                }
+                                break;
+                              }
+                            }
 
-                      if (success && context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Ulasan berhasil dikirim!',
-                                style: GoogleFonts.plusJakartaSans()),
-                            backgroundColor: AppTheme.success,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            margin: const EdgeInsets.all(16),
-                          ),
-                        );
-                      } else if (context.mounted) {
-                        setState(() => _isSubmitting = false);
-                      }
-                    },
-                    child: _isSubmitting 
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            if (success && context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Ulasan berhasil dikirim!',
+                                      style: GoogleFonts.plusJakartaSans()),
+                                  backgroundColor: AppTheme.success,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                  margin: const EdgeInsets.all(16),
+                                ),
+                              );
+                            } else if (context.mounted) {
+                              setState(() => _isSubmitting = false);
+                            }
+                          },
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
                         : const Text('Kirim Ulasan'),
                   ),
                 ),
@@ -369,61 +522,61 @@ class CheckoutScreen extends StatelessWidget {
               children: [
                 // Order Items
                 ...items.map((item) => Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 8,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          item.product.imageUrl,
-                          width: 60,
-                          height: 60,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.product.name,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
+                      child: Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              item.product.imageUrl,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
                             ),
-                            Text(
-                              '${item.quantity}x ${CurrencyFormat.formatPrice(item.product.price)}',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                color: AppTheme.textSecondary,
-                              ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.product.name,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  '${item.quantity}x ${CurrencyFormat.formatPrice(item.product.price)}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          Text(
+                            CurrencyFormat.formatPrice(item.total),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        CurrencyFormat.formatPrice(item.total),
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
+                    )),
                 const SizedBox(height: 20),
                 // Payment Method (placeholder)
                 Container(
@@ -562,8 +715,7 @@ class FavoritesScreen extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          _ProductDetailWrapper(product: product),
+                      builder: (_) => _ProductDetailWrapper(product: product),
                     ),
                   ),
                   onFavorite: () => state.toggleFavorite(product),
@@ -613,7 +765,8 @@ class ProfileScreen extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(28)),
               ),
               padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
               child: Column(
@@ -642,7 +795,8 @@ class ProfileScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   // KTP Status Badge
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: user.isKtpVerified
                           ? AppTheme.success.withOpacity(0.2)
@@ -764,8 +918,7 @@ class ProfileScreen extends StatelessWidget {
                       _MenuItem(
                           icon: Icons.receipt_outlined,
                           label: 'Riwayat Pesanan',
-                          onTap: () =>
-                              Navigator.pushNamed(context, '/orders')),
+                          onTap: () => Navigator.pushNamed(context, '/orders')),
                       _MenuItem(
                           icon: Icons.favorite_border,
                           label: 'Produk Favorit',
@@ -889,8 +1042,7 @@ class _MenuGroup extends StatelessWidget {
                       children: [
                         e.value,
                         if (e.key < items.length - 1)
-                          const Divider(
-                              height: 1, indent: 56, endIndent: 16),
+                          const Divider(height: 1, indent: 56, endIndent: 16),
                       ],
                     ))
                 .toList(),
@@ -1539,8 +1691,19 @@ class InvoiceScreen extends StatelessWidget {
 
   String _formatDate(DateTime dt) {
     const months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
     ];
     return '${dt.day} ${months[dt.month]} ${dt.year}';
   }
@@ -1586,11 +1749,14 @@ class ArticleScreen extends StatelessWidget {
     final articles = [
       _Article(
         title: 'Tips Memilih Tenda yang Tepat untuk Camping',
-        image: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400',
+        image:
+            'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400',
         category: 'Camping',
         readTime: '5 menit',
-        excerpt: 'Pelajari cara memilih tenda yang sesuai dengan kebutuhan camping Anda, mulai dari kapasitas, material, hingga ketahanan cuaca.',
-        content: '''Memilih tenda yang tepat adalah langkah pertama yang sangat penting dalam merencanakan camping Anda. Berikut adalah panduan lengkap untuk memilih tenda yang sesuai dengan kebutuhan.
+        excerpt:
+            'Pelajari cara memilih tenda yang sesuai dengan kebutuhan camping Anda, mulai dari kapasitas, material, hingga ketahanan cuaca.',
+        content:
+            '''Memilih tenda yang tepat adalah langkah pertama yang sangat penting dalam merencanakan camping Anda. Berikut adalah panduan lengkap untuk memilih tenda yang sesuai dengan kebutuhan.
 
 **1. Pertimbangkan Kapasitas**
 Pilih tenda dengan kapasitas yang lebih besar dari jumlah peserta. Misalnya, untuk 4 orang, pilih tenda 4-6 orang agar ada ruang ekstra untuk barang bawaan.
@@ -1615,11 +1781,14 @@ Dengan mempertimbangkan faktor-faktor di atas, Anda dapat memilih tenda yang pal
       ),
       _Article(
         title: 'Panduan Hiking untuk Pemula',
-        image: 'https://images.unsplash.com/photo-1551632811-561732d1e306?w=400',
+        image:
+            'https://images.unsplash.com/photo-1551632811-561732d1e306?w=400',
         category: 'Hiking',
         readTime: '7 menit',
-        excerpt: 'Ingin mulai hiking tapi bingung mulai dari mana? Simak panduan lengkap untuk pemula agar perjalanan Anda aman dan menyenangkan.',
-        content: '''Hiking adalah cara yang luar biasa untuk menjelajahi alam sekaligus menjaga kebugaran tubuh. Bagi pemula, berikut panduan lengkap untuk memulai.
+        excerpt:
+            'Ingin mulai hiking tapi bingung mulai dari mana? Simak panduan lengkap untuk pemula agar perjalanan Anda aman dan menyenangkan.',
+        content:
+            '''Hiking adalah cara yang luar biasa untuk menjelajahi alam sekaligus menjaga kebugaran tubuh. Bagi pemula, berikut panduan lengkap untuk memulai.
 
 **1. Pilih Jalur yang Sesuai**
 Mulai dari jalur yang mudah dan tidak terlalu curam. national parks atau jalur yang sudah ditandai dengan baik adalah pilihan yang tepat untuk pemula.
@@ -1650,11 +1819,14 @@ Dengan persiapan yang tepat, hiking akan menjadi pengalaman yang menyenangkan da
       ),
       _Article(
         title: 'Perlengkapan Wajib Camping di Musim Hujan',
-        image: 'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=400',
+        image:
+            'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=400',
         category: 'Tips',
         readTime: '4 menit',
-        excerpt: 'Camping saat musim hujan membutuhkan persiapan ekstra. Berikut perlengkapan yang wajib Anda bawa.',
-        content: '''Camping di musim hujan bisa menjadi pengalaman yang menyenangkan jika Anda mempersiapkan diri dengan baik. Berikut perlengkapan wajib yang harus Anda bawa.
+        excerpt:
+            'Camping saat musim hujan membutuhkan persiapan ekstra. Berikut perlengkapan yang wajib Anda bawa.',
+        content:
+            '''Camping di musim hujan bisa menjadi pengalaman yang menyenangkan jika Anda mempersiapkan diri dengan baik. Berikut perlengkapan wajib yang harus Anda bawa.
 
 **1. Tenda dengan Rain Fly**
 Pastikan tenda Anda memiliki rain fly yang berkualitas dan waterproof. Periksa juga semua zipper dan seam untuk memastikan tidak ada kebocoran.
@@ -1685,11 +1857,14 @@ Dengan persiapan yang matang, camping di musim hujan akan tetap nyaman dan aman.
       ),
       _Article(
         title: 'Cara Merawat Peralatan Outdoor Agar Tahan Lama',
-        image: 'https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=400',
+        image:
+            'https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=400',
         category: 'Tips',
         readTime: '6 menit',
-        excerpt: 'Peralatan outdoor yang terawat dengan baik akan lebih awet dan siap digunakan kapan saja. Simak cara merawatnya.',
-        content: '''Investasi pada peralatan outdoor yang berkualitas akan sia-sia jika tidak dirawat dengan baik. Berikut cara merawat peralatan outdoor agar tahan lama.
+        excerpt:
+            'Peralatan outdoor yang terawat dengan baik akan lebih awet dan siap digunakan kapan saja. Simak cara merawatnya.',
+        content:
+            '''Investasi pada peralatan outdoor yang berkualitas akan sia-sia jika tidak dirawat dengan baik. Berikut cara merawat peralatan outdoor agar tahan lama.
 
 **1. Tenda**
 - Bersihkan setelah setiap penggunaan
@@ -1726,11 +1901,14 @@ Dengan perawatan yang tepat, peralatan outdoor Anda akan bertahan bertahun-tahun
       ),
       _Article(
         title: 'Destinasi Camping Terbaik di Indonesia',
-        image: 'https://images.unsplash.com/photo-1523987355523-c7b5b0dd90a7?w=400',
+        image:
+            'https://images.unsplash.com/photo-1523987355523-c7b5b0dd90a7?w=400',
         category: 'Destinasi',
         readTime: '8 menit',
-        excerpt: 'Jelajahi berbagai destinasi camping terbaik di Indonesia yang menawarkan pemandangan alam yang menakjubkan.',
-        content: '''Indonesia memiliki banyak sekali destinasi camping yang menakjubkan. Berikut beberapa yang wajib Anda coba.
+        excerpt:
+            'Jelajahi berbagai destinasi camping terbaik di Indonesia yang menawarkan pemandangan alam yang menakjubkan.',
+        content:
+            '''Indonesia memiliki banyak sekali destinasi camping yang menakjubkan. Berikut beberapa yang wajib Anda coba.
 
 **1. Kawah Ijen, Jawa Timur**
 Camping di tepi kawah aktif dengan pemandangan blue fire yang ikonik. Suhu dingin menambah pengalaman yang tak terlupakan.
@@ -1757,11 +1935,14 @@ Setiap destinasi memiliki keunikan sendiri. Pastikan untuk memeriksa kondisi cua
       ),
       _Article(
         title: 'Teknik Memasak di Alam Terbuka',
-        image: 'https://images.unsplash.com/photo-1533240332313-0db49b459ad6?w=400',
+        image:
+            'https://images.unsplash.com/photo-1533240332313-0db49b459ad6?w=400',
         category: 'Tips',
         readTime: '5 menit',
-        excerpt: 'Belajar teknik memasak yang aman dan praktis saat camping di alam terbuka.',
-        content: '''Memasak di alam terbuka membutuhkan teknik khusus agar aman dan efisien. Berikut panduan lengkapnya.
+        excerpt:
+            'Belajar teknik memasak yang aman dan praktis saat camping di alam terbuka.',
+        content:
+            '''Memasak di alam terbuka membutuhkan teknik khusus agar aman dan efisien. Berikut panduan lengkapnya.
 
 **1. Pemilihan Tempat Memasak**
 - Pilih tempat yang jauh dari bahan mudah terbakar
@@ -1860,7 +2041,8 @@ class _ArticleCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
               child: Image.network(
                 article.image,
                 height: 160,
@@ -1984,7 +2166,8 @@ class _ArticleDetailScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Icon(Icons.arrow_back_ios_new, size: 18, color: AppTheme.textPrimary),
+                child: const Icon(Icons.arrow_back_ios_new,
+                    size: 18, color: AppTheme.textPrimary),
               ),
               onPressed: () => Navigator.pop(context),
             ),
@@ -2081,7 +2264,8 @@ class _KtpUploadScreenState extends State<KtpUploadScreen> {
   final _picker = ImagePicker();
 
   Future<void> _pickImage() async {
-    final pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    final pickedFile =
+        await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (pickedFile != null) {
       setState(() {
         _ktpFile = pickedFile;
@@ -2092,24 +2276,24 @@ class _KtpUploadScreenState extends State<KtpUploadScreen> {
   Future<void> _uploadKtp() async {
     if (_ktpFile == null) return;
     setState(() => _isLoading = true);
-    
+
     final state = context.read<AppState>();
     final error = await state.uploadUserKtp(_ktpFile!);
-    
+
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppTheme.error));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error), backgroundColor: AppTheme.error));
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('KTP berhasil diunggah dan sedang menunggu verifikasi.', style: GoogleFonts.plusJakartaSans()),
-        backgroundColor: AppTheme.success,
-      )
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('KTP berhasil diunggah dan sedang menunggu verifikasi.',
+          style: GoogleFonts.plusJakartaSans()),
+      backgroundColor: AppTheme.success,
+    ));
     Navigator.pop(context);
   }
 
@@ -2160,7 +2344,8 @@ class _KtpUploadScreenState extends State<KtpUploadScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.verified, color: AppTheme.success, size: 48),
+                    const Icon(Icons.verified,
+                        color: AppTheme.success, size: 48),
                     const SizedBox(height: 16),
                     Text(
                       'KTP Terverifikasi',
@@ -2192,7 +2377,8 @@ class _KtpUploadScreenState extends State<KtpUploadScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(Icons.hourglass_empty, color: AppTheme.warning, size: 48),
+                    const Icon(Icons.hourglass_empty,
+                        color: AppTheme.warning, size: 48),
                     const SizedBox(height: 16),
                     Text(
                       'Menunggu Verifikasi',
@@ -2250,7 +2436,9 @@ class _KtpUploadScreenState extends State<KtpUploadScreen> {
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.add_a_photo_outlined, size: 48, color: AppTheme.primary.withOpacity(0.5)),
+                                Icon(Icons.add_a_photo_outlined,
+                                    size: 48,
+                                    color: AppTheme.primary.withOpacity(0.5)),
                                 const SizedBox(height: 12),
                                 Text(
                                   'Tap untuk memilih foto KTP',
@@ -2267,7 +2455,8 @@ class _KtpUploadScreenState extends State<KtpUploadScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: (_ktpFile == null || _isLoading) ? null : _uploadKtp,
+                      onPressed:
+                          (_ktpFile == null || _isLoading) ? null : _uploadKtp,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
@@ -2275,7 +2464,8 @@ class _KtpUploadScreenState extends State<KtpUploadScreen> {
                           ? const SizedBox(
                               height: 20,
                               width: 20,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2),
                             )
                           : const Text('Unggah KTP Sekarang'),
                     ),

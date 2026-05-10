@@ -201,19 +201,46 @@ class CartItem {
   final String id;
   final Product product;
   int quantity;
+  final String type;
+  final int? rentalDays;
+  final DateTime? rentalStartDate;
+  final Review? existingReview;
 
-  CartItem({this.id = '', required this.product, this.quantity = 1});
+  CartItem({
+    this.id = '',
+    required this.product,
+    this.quantity = 1,
+    this.type = 'buy',
+    this.rentalDays,
+    this.rentalStartDate,
+    this.existingReview,
+  });
 
   factory CartItem.fromJson(Map<String, dynamic> json) {
     final productJson = json['product'] as Map<String, dynamic>?;
+    Review? review;
+    final ratings = productJson?['product_ratings'];
+    if (ratings is List &&
+        ratings.isNotEmpty &&
+        ratings.first is Map<String, dynamic>) {
+      review = Review.fromJson(ratings.first as Map<String, dynamic>);
+    }
+
     return CartItem(
       id: json['id']?.toString() ?? '',
       product: Product.fromJson(productJson ?? {}),
       quantity: int.tryParse(json['qty']?.toString() ?? '1') ?? 1,
+      type: json['type']?.toString() ?? 'buy',
+      rentalDays: int.tryParse(json['duration']?.toString() ?? ''),
+      rentalStartDate: json['start_date'] != null
+          ? DateTime.tryParse(json['start_date'].toString())
+          : null,
+      existingReview: review,
     );
   }
 
   double get total => product.price * quantity;
+  bool get isRental => type == 'rent';
 }
 
 class RentalCartItem {
@@ -221,12 +248,14 @@ class RentalCartItem {
   int quantity;
   final DateTime rentalStartDate;
   final DateTime rentalEndDate;
+  final String orderDetailId;
 
   RentalCartItem({
     required this.product,
     this.quantity = 1,
     required this.rentalStartDate,
     required this.rentalEndDate,
+    this.orderDetailId = '',
   });
 
   int get rentalDays => rentalEndDate.difference(rentalStartDate).inDays + 1;
@@ -243,6 +272,7 @@ class Order {
   final String trackingNumber;
   final String address;
   final String? paymentProof;
+  final bool returnSubmitted;
 
   const Order({
     required this.id,
@@ -254,6 +284,7 @@ class Order {
     required this.trackingNumber,
     required this.address,
     this.paymentProof,
+    this.returnSubmitted = false,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -274,6 +305,9 @@ class Order {
       }
     }
 
+    final returns = json['returns'];
+    final returnSubmitted = returns is List && returns.isNotEmpty;
+
     return Order(
       id: json['id']?.toString() ?? '',
       items: items,
@@ -288,6 +322,7 @@ class Order {
           json['address']?.toString() ??
           '',
       paymentProof: json['bukti_pembayaran']?.toString(),
+      returnSubmitted: returnSubmitted,
     );
   }
 
@@ -301,6 +336,7 @@ class Order {
     String? trackingNumber,
     String? address,
     String? paymentProof,
+    bool? returnSubmitted,
   }) {
     return Order(
       id: id ?? this.id,
@@ -312,6 +348,7 @@ class Order {
       trackingNumber: trackingNumber ?? this.trackingNumber,
       address: address ?? this.address,
       paymentProof: paymentProof ?? this.paymentProof,
+      returnSubmitted: returnSubmitted ?? this.returnSubmitted,
     );
   }
 }
@@ -326,6 +363,7 @@ class RentalOrder {
   final DateTime rentalEndDate;
   final String address;
   final String? paymentProof;
+  final bool returnSubmitted;
 
   const RentalOrder({
     required this.id,
@@ -337,6 +375,7 @@ class RentalOrder {
     required this.rentalEndDate,
     required this.address,
     this.paymentProof,
+    this.returnSubmitted = false,
   });
 }
 

@@ -1,6 +1,5 @@
 // app_state.dart - Simple state management with ChangeNotifier
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'models.dart';
 import 'services/api_service.dart';
@@ -25,7 +24,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadInitialData() async {
     await ApiService.init();
-    
+
     try {
       _currentUser = await ApiService.getMe();
       _isLoggedIn = true;
@@ -57,10 +56,18 @@ class AppState extends ChangeNotifier {
 
   List<String> get categories => _categories;
 
+  // Cached product reviews: productId -> list of reviews
+  final Map<String, List<Review>> _productReviews = {};
+
+  // Per-order per-product review left by the current user: orderId -> (productId -> Review)
+  final Map<String, Map<String, Review>> _orderItemReviews = {};
+
   int get cartCount => _cartItems.fold(0, (sum, item) => sum + item.quantity);
   double get cartTotal => _cartItems.fold(0, (sum, item) => sum + item.total);
-  int get rentalCartCount => _rentalCartItems.fold(0, (sum, item) => sum + item.quantity);
-  double get rentalCartTotal => _rentalCartItems.fold(0, (sum, item) => sum + item.total);
+  int get rentalCartCount =>
+      _rentalCartItems.fold(0, (sum, item) => sum + item.quantity);
+  double get rentalCartTotal =>
+      _rentalCartItems.fold(0, (sum, item) => sum + item.total);
 
   Future<String?> login(String email, String password) async {
     try {
@@ -186,12 +193,28 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateAllRentalDates(DateTime startDate, DateTime endDate) {
+    _rentalCartItems = _rentalCartItems
+        .map((item) => RentalCartItem(
+              product: item.product,
+              quantity: item.quantity,
+              rentalStartDate: startDate,
+              rentalEndDate: endDate,
+              orderDetailId: item.orderDetailId,
+            ))
+        .toList();
+    notifyListeners();
+  }
+
   Future<String?> placeRentalOrder(
     String address, {
     String? courier,
     String? paymentMethod,
     String? phone,
     String? receiverName,
+    String? postalCode,
+    String? city,
+    String? district,
     XFile? paymentProofFile,
     XFile? ktpFile,
   }) async {
@@ -207,7 +230,13 @@ class AppState extends ChangeNotifier {
       final newOrder = await ApiService.createOrder(
         courier: courier ?? 'JNE',
         address: address,
-        phone: phone ?? (_currentUser!.phone.isNotEmpty ? _currentUser!.phone : '081234567890'),
+        shippingCity: city ?? 'Kota Bandung',
+        shippingDistrict: district ?? 'Kecamatan',
+        postalCode: postalCode ?? '40111',
+        phone: phone ??
+            (_currentUser!.phone.isNotEmpty
+                ? _currentUser!.phone
+                : '081234567890'),
         receiverName: receiverName ?? _currentUser!.name,
         paymentMethod: paymentMethod ?? 'transfer',
         paymentProofFile: paymentProofFile,
@@ -218,11 +247,13 @@ class AppState extends ChangeNotifier {
                   'qty': item.quantity,
                   'type': 'rent',
                   'duration': item.rentalDays,
-                  'start_date': item.rentalStartDate.toIso8601String().split('T')[0],
+                  'start_date':
+                      item.rentalStartDate.toIso8601String().split('T')[0],
                 })
             .toList(),
       );
       _orders.insert(0, newOrder);
+      _syncRentalOrdersFromOrders();
       clearRentalCart();
       notifyListeners();
       return null;
@@ -232,18 +263,38 @@ class AppState extends ChangeNotifier {
   }
 
   void uploadPaymentProof(String orderId, String paymentProof) {
-    final index = _rentalOrders.indexWhere((o) => o.id == orderId);
-    if (index != -1) {
-      _rentalOrders[index] = RentalOrder(
-        id: _rentalOrders[index].id,
-        items: _rentalOrders[index].items,
-        total: _rentalOrders[index].total,
+    // Update for _rentalOrders
+    final rentalIndex = _rentalOrders.indexWhere((o) => o.id == orderId);
+    if (rentalIndex != -1) {
+      _rentalOrders[rentalIndex] = RentalOrder(
+        id: _rentalOrders[rentalIndex].id,
+        items: _rentalOrders[rentalIndex].items,
+        total: _rentalOrders[rentalIndex].total,
         status: 'Diproses',
-        createdAt: _rentalOrders[index].createdAt,
-        rentalStartDate: _rentalOrders[index].rentalStartDate,
-        rentalEndDate: _rentalOrders[index].rentalEndDate,
-        address: _rentalOrders[index].address,
+        createdAt: _rentalOrders[rentalIndex].createdAt,
+        rentalStartDate: _rentalOrders[rentalIndex].rentalStartDate,
+        rentalEndDate: _rentalOrders[rentalIndex].rentalEndDate,
+        address: _rentalOrders[rentalIndex].address,
         paymentProof: paymentProof,
+        returnSubmitted: _rentalOrders[rentalIndex].returnSubmitted,
+      );
+      notifyListeners();
+    }
+
+    // Update for _orders
+    final orderIndex = _orders.indexWhere((o) => o.id == orderId);
+    if (orderIndex != -1) {
+      _orders[orderIndex] = Order(
+        id: _orders[orderIndex].id,
+        items: _orders[orderIndex].items,
+        total: _orders[orderIndex].total,
+        status: 'Diproses',
+        createdAt: _orders[orderIndex].createdAt,
+        courier: _orders[orderIndex].courier,
+        trackingNumber: _orders[orderIndex].trackingNumber,
+        address: _orders[orderIndex].address,
+        paymentProof: paymentProof,
+        returnSubmitted: _orders[orderIndex].returnSubmitted,
       );
       notifyListeners();
     }
@@ -261,6 +312,7 @@ class AppState extends ChangeNotifier {
       rentalEndDate: order.rentalEndDate,
       address: order.address,
       paymentProof: order.paymentProof,
+      returnSubmitted: order.returnSubmitted,
     );
     notifyListeners();
   }
@@ -316,7 +368,8 @@ class AppState extends ChangeNotifier {
 
   Future<String?> fetchProducts({String? category, String? search}) async {
     try {
-      _products = await ApiService.fetchProducts(category: category, search: search);
+      _products =
+          await ApiService.fetchProducts(category: category, search: search);
       notifyListeners();
       return null;
     } catch (error) {
@@ -334,6 +387,8 @@ class AppState extends ChangeNotifier {
 
     try {
       _orders = await ApiService.fetchOrders();
+      _syncRentalOrdersFromOrders();
+      _syncExistingReviewsFromOrders();
       notifyListeners();
       return null;
     } catch (error) {
@@ -391,26 +446,47 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void returnRentalOrder(String orderId) {
-  final index = _rentalOrders.indexWhere((o) => o.id == orderId);
+  Future<String?> returnRentalOrder({
+    required String orderId,
+    required String detailId,
+    required String metodeReturn,
+    String? resiReturn,
+    required XFile fotoKondisi,
+  }) async {
+    final index = _rentalOrders.indexWhere((o) => o.id == orderId);
 
-  if (index != -1) {
-    final old = _rentalOrders[index];
+    if (index != -1) {
+      try {
+        await ApiService.submitRentalReturn(
+          detailId: detailId,
+          metodeReturn: metodeReturn,
+          resiReturn: resiReturn,
+          fotoKondisi: fotoKondisi,
+        );
+      } catch (error) {
+        return error.toString();
+      }
 
-    _rentalOrders[index] = RentalOrder(
-      id: old.id,
-      items: old.items,
-      total: old.total,
-      status: 'Dikembalikan',
-      createdAt: old.createdAt,
-      rentalStartDate: old.rentalStartDate,
-      rentalEndDate: old.rentalEndDate,
-      address: old.address,
-    );
+      final old = _rentalOrders[index];
 
-    notifyListeners();
+      _rentalOrders[index] = RentalOrder(
+        id: old.id,
+        items: old.items,
+        total: old.total,
+        status: 'Dikembalikan',
+        createdAt: old.createdAt,
+        rentalStartDate: old.rentalStartDate,
+        rentalEndDate: old.rentalEndDate,
+        address: old.address,
+        paymentProof: old.paymentProof,
+        returnSubmitted: true,
+      );
+
+      notifyListeners();
+    }
+
+    return null;
   }
-}
 
   void confirmReceived(String orderId) {
     final order = _orders.firstWhere((o) => o.id == orderId);
@@ -423,6 +499,7 @@ class AppState extends ChangeNotifier {
       courier: order.courier,
       trackingNumber: order.trackingNumber,
       address: order.address,
+      returnSubmitted: order.returnSubmitted,
     );
     notifyListeners();
   }
@@ -467,9 +544,212 @@ class AppState extends ChangeNotifier {
         rating: rating,
         comment: comment,
       );
+      // Refresh product reviews cache for this product
+      List<Review> reviews = [];
+      try {
+        reviews = await ApiService.fetchProductReviews(productId);
+        _productReviews[productId] = reviews;
+      } catch (_) {}
+
+      // Recompute aggregate rating & count from fetched reviews and update local products/orders
+      final int newCount = reviews.length;
+      final double newAvg = newCount > 0
+          ? (reviews.map((r) => r.rating).reduce((a, b) => a + b) / newCount)
+          : rating.toDouble();
+
+      void _replaceProductStats(String pid, double avg, int count) {
+        // Update in _products
+        final pIndex = _products.indexWhere((p) => p.id == pid);
+        if (pIndex != -1) {
+          final old = _products[pIndex];
+          final updated = Product(
+            id: old.id,
+            name: old.name,
+            description: old.description,
+            price: old.price,
+            rentalPrice: old.rentalPrice,
+            imageUrl: old.imageUrl,
+            category: old.category,
+            rating: avg,
+            reviewCount: count,
+            isAvailable: old.isAvailable,
+            isRentable: old.isRentable,
+            sellerName: old.sellerName,
+            sellerCity: old.sellerCity,
+            stock: old.stock,
+          );
+          _products[pIndex] = updated;
+        }
+
+        // Update in orders
+        for (var i = 0; i < _orders.length; i++) {
+          final order = _orders[i];
+          final items = order.items
+              .map((item) => item.product.id == pid
+                  ? CartItem(
+                      id: item.id,
+                      product: Product(
+                        id: item.product.id,
+                        name: item.product.name,
+                        description: item.product.description,
+                        price: item.product.price,
+                        rentalPrice: item.product.rentalPrice,
+                        imageUrl: item.product.imageUrl,
+                        category: item.product.category,
+                        rating: avg,
+                        reviewCount: count,
+                        isAvailable: item.product.isAvailable,
+                        isRentable: item.product.isRentable,
+                        sellerName: item.product.sellerName,
+                        sellerCity: item.product.sellerCity,
+                        stock: item.product.stock,
+                      ),
+                      quantity: item.quantity,
+                      type: item.type,
+                      rentalDays: item.rentalDays,
+                      rentalStartDate: item.rentalStartDate,
+                      existingReview: item.existingReview)
+                  : item)
+              .toList();
+          _orders[i] = order.copyWith(items: items);
+        }
+
+        // Update in rental orders
+        for (var i = 0; i < _rentalOrders.length; i++) {
+          final rOrder = _rentalOrders[i];
+          final items = rOrder.items
+              .map((item) => item.product.id == pid
+                  ? RentalCartItem(
+                      product: Product(
+                        id: item.product.id,
+                        name: item.product.name,
+                        description: item.product.description,
+                        price: item.product.price,
+                        rentalPrice: item.product.rentalPrice,
+                        imageUrl: item.product.imageUrl,
+                        category: item.product.category,
+                        rating: avg,
+                        reviewCount: count,
+                        isAvailable: item.product.isAvailable,
+                        isRentable: item.product.isRentable,
+                        sellerName: item.product.sellerName,
+                        sellerCity: item.product.sellerCity,
+                        stock: item.product.stock,
+                      ),
+                      quantity: item.quantity,
+                      rentalStartDate: item.rentalStartDate,
+                      rentalEndDate: item.rentalEndDate,
+                      orderDetailId: item.orderDetailId,
+                    )
+                  : item)
+              .toList();
+          _rentalOrders[i] = RentalOrder(
+            id: rOrder.id,
+            items: items,
+            total: rOrder.total,
+            status: rOrder.status,
+            createdAt: rOrder.createdAt,
+            rentalStartDate: rOrder.rentalStartDate,
+            rentalEndDate: rOrder.rentalEndDate,
+            address: rOrder.address,
+            paymentProof: rOrder.paymentProof,
+            returnSubmitted: rOrder.returnSubmitted,
+          );
+        }
+      }
+
+      _replaceProductStats(productId, newAvg, newCount);
+
+      // Insert the submitted review into order-item review map so Orders UI can show it immediately
+      final newReview = Review(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        userName: _currentUser?.name ?? 'Anda',
+        avatarUrl: _currentUser?.avatarUrl ?? 'https://i.pravatar.cc/150?img=3',
+        rating: rating.toDouble(),
+        comment: comment ?? '',
+        createdAt: DateTime.now(),
+      );
+
+      _orderItemReviews.putIfAbsent(orderId, () => {});
+      _orderItemReviews[orderId]![productId] = newReview;
+      notifyListeners();
+
       return null;
     } catch (e) {
       return e.toString();
+    }
+  }
+
+  /// Get cached reviews for a product. If not present, will fetch and cache.
+  Future<List<Review>> fetchProductReviews(String productId) async {
+    if (_productReviews.containsKey(productId)) {
+      return _productReviews[productId]!;
+    }
+    try {
+      final reviews = await ApiService.fetchProductReviews(productId);
+      _productReviews[productId] = reviews;
+      return reviews;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Get a review submitted by the current user for a specific order item, if any.
+  Review? getOrderItemReview(String orderId, String productId) {
+    return _orderItemReviews[orderId]?[productId];
+  }
+
+  void _syncRentalOrdersFromOrders() {
+    _rentalOrders = _orders
+        .where((order) => order.items.any((item) => item.isRental))
+        .map((order) {
+      final rentalItems =
+          order.items.where((item) => item.isRental).map((item) {
+        final start = item.rentalStartDate ?? order.createdAt;
+        final days = item.rentalDays ?? 1;
+        return RentalCartItem(
+          product: item.product,
+          quantity: item.quantity,
+          rentalStartDate: start,
+          rentalEndDate: start.add(Duration(days: days - 1)),
+          orderDetailId: item.id,
+        );
+      }).toList();
+
+      final first = rentalItems.first;
+      final status = order.status.toLowerCase() == 'selesai'
+          ? 'Selesai'
+          : order.status.toLowerCase() == 'dikirim'
+              ? 'Dikirim'
+              : order.status.toLowerCase() == 'menunggu'
+                  ? 'Menunggu'
+                  : 'Diproses';
+
+      return RentalOrder(
+        id: order.id,
+        items: rentalItems,
+        total: order.total,
+        status: status,
+        createdAt: order.createdAt,
+        rentalStartDate: first.rentalStartDate,
+        rentalEndDate: rentalItems
+            .map((item) => item.rentalEndDate)
+            .reduce((a, b) => a.isAfter(b) ? a : b),
+        address: order.address,
+        paymentProof: order.paymentProof,
+        returnSubmitted: order.returnSubmitted,
+      );
+    }).toList();
+  }
+
+  void _syncExistingReviewsFromOrders() {
+    for (final order in _orders) {
+      for (final item in order.items) {
+        final review = item.existingReview;
+        if (review == null) continue;
+        _orderItemReviews.putIfAbsent(order.id, () => {});
+        _orderItemReviews[order.id]![item.product.id] = review;
+      }
     }
   }
 

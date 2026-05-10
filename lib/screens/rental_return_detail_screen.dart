@@ -2,8 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../app_state.dart';
 import '../models.dart';
-import '../theme.dart';
 
 class RentalReturnDetailScreen extends StatefulWidget {
   final RentalOrder order;
@@ -11,13 +12,16 @@ class RentalReturnDetailScreen extends StatefulWidget {
   const RentalReturnDetailScreen({super.key, required this.order});
 
   @override
-  State<RentalReturnDetailScreen> createState() => _RentalReturnDetailScreenState();
+  State<RentalReturnDetailScreen> createState() =>
+      _RentalReturnDetailScreenState();
 }
 
 class _RentalReturnDetailScreenState extends State<RentalReturnDetailScreen> {
   final TextEditingController _resiCtrl = TextEditingController();
   File? _image;
   final ImagePicker _picker = ImagePicker();
+  String _metodeReturn = 'antar';
+  bool _isSubmitting = false;
 
   Future<void> _pickImage() async {
     final picked = await _picker.pickImage(source: ImageSource.gallery);
@@ -114,7 +118,8 @@ class _RentalReturnDetailScreenState extends State<RentalReturnDetailScreen> {
                   children: [
                     const Text('Status Barang'),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue[100],
                         borderRadius: BorderRadius.circular(8),
@@ -128,16 +133,40 @@ class _RentalReturnDetailScreenState extends State<RentalReturnDetailScreen> {
 
             const SizedBox(height: 20),
 
-            // INPUT RESI
-            Text('Input Resi Pengembalian'),
+            Text('Metode Pengembalian'),
             const SizedBox(height: 6),
-            TextField(
-              controller: _resiCtrl,
-              decoration: const InputDecoration(
-                hintText: 'Masukkan nomor resi pengiriman balik',
-                border: OutlineInputBorder(),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<String>(
+                    value: 'antar',
+                    groupValue: _metodeReturn,
+                    onChanged: (v) => setState(() => _metodeReturn = v!),
+                    title: const Text('Antar Langsung'),
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<String>(
+                    value: 'kurir',
+                    groupValue: _metodeReturn,
+                    onChanged: (v) => setState(() => _metodeReturn = v!),
+                    title: const Text('Kurir'),
+                  ),
+                ),
+              ],
             ),
+
+            // INPUT RESI
+            if (_metodeReturn == 'kurir') Text('Input Resi Pengembalian'),
+            const SizedBox(height: 6),
+            if (_metodeReturn == 'kurir')
+              TextField(
+                controller: _resiCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'Masukkan nomor resi pengiriman balik',
+                  border: OutlineInputBorder(),
+                ),
+              ),
 
             const SizedBox(height: 20),
 
@@ -166,13 +195,58 @@ class _RentalReturnDetailScreenState extends State<RentalReturnDetailScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Pengembalian diproses')),
-                  );
-                  Navigator.pop(context);
-                },
-                child: const Text('Kirim Pengembalian'),
+                onPressed: _isSubmitting
+                    ? null
+                    : () async {
+                        if (item.orderDetailId.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content:
+                                    Text('Detail pesanan tidak ditemukan')),
+                          );
+                          return;
+                        }
+                        if (_metodeReturn == 'kurir' &&
+                            _resiCtrl.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Nomor resi wajib diisi')),
+                          );
+                          return;
+                        }
+                        if (_image == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Foto kondisi wajib diupload')),
+                          );
+                          return;
+                        }
+
+                        setState(() => _isSubmitting = true);
+                        final error =
+                            await context.read<AppState>().returnRentalOrder(
+                                  orderId: widget.order.id,
+                                  detailId: item.orderDetailId,
+                                  metodeReturn: _metodeReturn,
+                                  resiReturn: _resiCtrl.text.trim(),
+                                  fotoKondisi: XFile(_image!.path),
+                                );
+                        if (!context.mounted) return;
+                        setState(() => _isSubmitting = false);
+                        if (error != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(error)),
+                          );
+                          return;
+                        }
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Pengembalian diproses')),
+                        );
+                        Navigator.pop(context);
+                      },
+                child:
+                    Text(_isSubmitting ? 'Mengirim...' : 'Kirim Pengembalian'),
               ),
             )
           ],

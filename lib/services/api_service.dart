@@ -268,6 +268,7 @@ class ApiService {
     required String paymentMethod,
     String? shippingCity,
     String? shippingDistrict,
+    String? postalCode,
     XFile? paymentProofFile,
     XFile? ktpFile,
   }) async {
@@ -284,7 +285,7 @@ class ApiService {
     request.fields['shipping_city'] = shippingCity ?? 'Kota Tidak Diketahui';
     request.fields['shipping_district'] =
         shippingDistrict ?? 'Kecamatan Tidak Diketahui';
-    request.fields['shipping_postal_code'] = '00000';
+    request.fields['shipping_postal_code'] = postalCode ?? '00000';
     request.fields['shipping_phone'] = phone;
     request.fields['metode_pembayaran'] = paymentMethod;
     request.fields['kurir'] = courier;
@@ -381,6 +382,43 @@ class ApiService {
   }
 
   // ─── KTP Upload ───────────────────────────────────────────────────────────
+
+  static Future<void> submitRentalReturn({
+    required String detailId,
+    required String metodeReturn,
+    String? resiReturn,
+    required XFile fotoKondisi,
+  }) async {
+    final uri = Uri.parse('$baseUrl/returns/store/$detailId');
+    final request = http.MultipartRequest('POST', uri);
+
+    request.headers.addAll({
+      'Accept': 'application/json',
+      if (_token != null) 'Authorization': 'Bearer $_token',
+    });
+
+    request.fields['metode_return'] = metodeReturn;
+    if (resiReturn != null && resiReturn.isNotEmpty) {
+      request.fields['resi_return'] = resiReturn;
+    }
+
+    final bytes = await fotoKondisi.readAsBytes();
+    request.files.add(http.MultipartFile.fromBytes(
+      'foto_kondisi',
+      bytes,
+      filename: fotoKondisi.name.isEmpty ? 'kondisi.jpg' : fotoKondisi.name,
+    ));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    final body = jsonDecode(response.body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) return;
+
+    throw ApiException(
+      body['message']?.toString() ?? 'Gagal mengirim pengembalian',
+    );
+  }
 
   static Future<Map<String, dynamic>> uploadKtp(XFile ktpFile) async {
     final uri = Uri.parse('$baseUrl/profile/ktp');

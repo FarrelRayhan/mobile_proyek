@@ -44,6 +44,9 @@ class _RentalOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.read<AppState>();
+    final hasReviewed = order.items.every(
+      (item) => state.getOrderItemReview(order.id, item.product.id) != null,
+    );
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -98,7 +101,8 @@ class _RentalOrderCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.calendar_today, size: 16, color: AppTheme.textSecondary),
+                const Icon(Icons.calendar_today,
+                    size: 16, color: AppTheme.textSecondary),
                 const SizedBox(width: 8),
                 Text(
                   'Periode Sewa: ${_formatDate(order.rentalStartDate)} - ${_formatDate(order.rentalEndDate)}',
@@ -148,6 +152,28 @@ class _RentalOrderCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            StarRating(rating: item.product.rating, size: 12),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${item.product.rating.toStringAsFixed(1)}',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              ' (${item.product.reviewCount})',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                color: AppTheme.textLight,
+                              ),
+                            ),
+                          ],
+                        ),
                         Text(
                           '${item.quantity}x • ${item.rentalDays} hari',
                           style: GoogleFonts.plusJakartaSans(
@@ -155,6 +181,36 @@ class _RentalOrderCard extends StatelessWidget {
                             color: AppTheme.textSecondary,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        Builder(builder: (ctx) {
+                          final s = ctx.read<AppState>();
+                          final review =
+                              s.getOrderItemReview(order.id, item.product.id);
+                          if (review == null) return const SizedBox.shrink();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                  children: List.generate(
+                                      5,
+                                      (i) => Icon(
+                                          i < review.rating
+                                              ? Icons.star_rounded
+                                              : Icons.star_border_rounded,
+                                          size: 14,
+                                          color: AppTheme.accentWarm))),
+                              if (review.comment.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(review.comment,
+                                    style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12,
+                                        color: AppTheme.textSecondary),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis),
+                              ],
+                            ],
+                          );
+                        }),
                       ],
                     ),
                   ),
@@ -211,7 +267,8 @@ class _RentalOrderCard extends StatelessWidget {
                 children: [
                   if (order.status == 'Menunggu') ...[
                     ElevatedButton(
-                      onPressed: () => _showPaymentProofDialog(context, state, order.id),
+                      onPressed: () =>
+                          _showPaymentProofDialog(context, state, order.id),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primary,
                         padding: const EdgeInsets.symmetric(
@@ -224,9 +281,9 @@ class _RentalOrderCard extends StatelessWidget {
                       child: const Text('Upload Bukti'),
                     ),
                   ],
-                  if (order.status == 'Selesai') ...[
+                  if (order.status == 'Selesai' && !hasReviewed) ...[
                     OutlinedButton(
-                      onPressed: () {},
+                      onPressed: () => _showReviewDialog(context, state, order),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.primary,
                         side: const BorderSide(color: AppTheme.primary),
@@ -251,13 +308,25 @@ class _RentalOrderCard extends StatelessWidget {
 
   String _formatDate(DateTime dt) {
     const months = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des'
     ];
     return '${dt.day} ${months[dt.month]} ${dt.year}';
   }
 
-  void _showPaymentProofDialog(BuildContext context, AppState state, String orderId) {
+  void _showPaymentProofDialog(
+      BuildContext context, AppState state, String orderId) {
     final _ctrl = TextEditingController();
 
     showDialog(
@@ -301,13 +370,132 @@ class _RentalOrderCard extends StatelessWidget {
                 state.uploadPaymentProof(orderId, _ctrl.text);
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Bukti pembayaran berhasil diupload!')),
+                  const SnackBar(
+                      content: Text('Bukti pembayaran berhasil diupload!')),
                 );
               }
             },
             child: const Text('Upload'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showReviewDialog(
+      BuildContext context, AppState state, RentalOrder order) {
+    double _rating = 5;
+    final _ctrl = TextEditingController();
+    bool _isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Beri Ulasan',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      5,
+                      (i) => GestureDetector(
+                        onTap: () => setState(() => _rating = i + 1.0),
+                        child: Icon(
+                          i < _rating
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          color: AppTheme.accentWarm,
+                          size: 36,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _ctrl,
+                  maxLines: 3,
+                  style: GoogleFonts.plusJakartaSans(fontSize: 14),
+                  decoration: const InputDecoration(
+                    hintText: 'Tulis ulasanmu disini...',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () async {
+                            setState(() => _isSubmitting = true);
+                            bool success = true;
+
+                            for (var item in order.items) {
+                              final error = await state.submitReview(
+                                orderId: order.id,
+                                productId: item.product.id,
+                                rating: _rating.toInt(),
+                                comment: _ctrl.text,
+                              );
+                              if (error != null &&
+                                  error !=
+                                      'The order id has already been taken.') {
+                                success = false;
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(error)));
+                                }
+                                break;
+                              }
+                            }
+
+                            if (success && context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Ulasan berhasil dikirim!',
+                                      style: GoogleFonts.plusJakartaSans()),
+                                  backgroundColor: AppTheme.success,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                  margin: const EdgeInsets.all(16),
+                                ),
+                              );
+                            } else if (context.mounted) {
+                              setState(() => _isSubmitting = false);
+                            }
+                          },
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('Kirim Ulasan'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

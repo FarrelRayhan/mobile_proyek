@@ -312,6 +312,9 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
   final _addressCtrl = TextEditingController(text: 'Jl. Raya Bandung No. 12, Kota Bandung');
   final _nameCtrl = TextEditingController(text: 'Ahmad Fauzi');
   final _phoneCtrl = TextEditingController(text: '081234567890');
+  final _postalCtrl = TextEditingController(text: '40111');
+  DateTime? _startDate;
+  DateTime? _endDate;
   String _selectedCity = RegionData.cities.first;
   String _selectedDistrict = RegionData.districts[RegionData.cities.first]!.first;
 
@@ -337,6 +340,16 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
       _nameCtrl.text = user.name.isNotEmpty ? user.name : _nameCtrl.text;
       _phoneCtrl.text = user.phone.isNotEmpty ? user.phone : _phoneCtrl.text;
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final items = context.read<AppState>().rentalCartItems;
+      if (items.isNotEmpty) {
+        setState(() {
+          _startDate = items.first.rentalStartDate;
+          _endDate = items.first.rentalEndDate;
+        });
+      }
+    });
   }
 
   double _getShippingCost() {
@@ -365,6 +378,27 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
       setState(() {
         _ktpFile = pickedFile;
       });
+    }
+  }
+
+  Future<void> _pickDateRange(BuildContext context) async {
+    final state = context.read<AppState>();
+    final initialStart = _startDate ?? DateTime.now();
+    final initialEnd = _endDate ?? initialStart.add(const Duration(days: 1));
+
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: DateTimeRange(start: initialStart, end: initialEnd),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+      });
+      state.updateAllRentalDates(picked.start, picked.end);
     }
   }
 
@@ -455,6 +489,44 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
             ),
             const SizedBox(height: 14),
 
+            // Periode Sewa
+            _SectionCard(
+              title: 'Periode Sewa',
+              icon: Icons.calendar_month_outlined,
+              child: InkWell(
+                onTap: () => _pickDateRange(context),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppTheme.divider),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Tanggal Mulai', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppTheme.textSecondary)),
+                          Text(_startDate != null ? '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}' : '-', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const Icon(Icons.arrow_forward_outlined, size: 16, color: AppTheme.textSecondary),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('Tanggal Selesai', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppTheme.textSecondary)),
+                          Text(_endDate != null ? '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}' : '-', style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
             // Alamat
             _SectionCard(
               title: 'Alamat Pengiriman',
@@ -522,6 +594,17 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _postalCtrl,
+                    keyboardType: TextInputType.number,
+                    style: GoogleFonts.plusJakartaSans(fontSize: 14),
+                    decoration: const InputDecoration(
+                      labelText: 'Kode Pos',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.local_post_office_outlined),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -734,6 +817,49 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
                       );
                     }).toList(),
                   ),
+                  if (_selectedPayment == 'Transfer Bank') ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Pilih Bank',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _banks.map((bank) {
+                        final selected = _selectedBank == bank;
+                        return GestureDetector(
+                          onTap: () => setState(() => _selectedBank = bank),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selected ? AppTheme.accent : Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: selected ? AppTheme.accent : AppTheme.divider,
+                              ),
+                            ),
+                            child: Text(
+                              bank,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: selected ? Colors.white : AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -816,6 +942,9 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
       paymentMethod: apiPaymentMethod,
       phone: _phoneCtrl.text,
       receiverName: _nameCtrl.text,
+      postalCode: _postalCtrl.text,
+      city: _selectedCity,
+      district: _selectedDistrict,
       paymentProofFile: _paymentProof,
       ktpFile: needsKtp ? _ktpFile : null,
     );

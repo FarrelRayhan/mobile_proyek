@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_state.dart';
 import '../theme.dart';
-import '../models.dart';
 import 'rental_return_detail_screen.dart'; // ⬅️ penting
 
 class RentalReturnScreen extends StatelessWidget {
@@ -12,7 +11,12 @@ class RentalReturnScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final orders = state.rentalOrders;
+    final orders = state.rentalOrders.where((order) {
+      final status = order.status.toLowerCase();
+      return status == 'selesai' ||
+          status == 'sampai' ||
+          status == 'dikembalikan';
+    }).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
@@ -81,19 +85,21 @@ class RentalReturnScreen extends StatelessWidget {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: order.status == 'Dikembalikan'
+                          onPressed: order.status == 'Dikembalikan' ||
+                                  order.returnSubmitted
                               ? null // disable kalau sudah
                               : () {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          RentalReturnDetailScreen(order: order),
+                                      builder: (_) => RentalReturnDetailScreen(
+                                          order: order),
                                     ),
                                   );
                                 },
                           child: Text(
-                            order.status == 'Dikembalikan'
+                            order.status == 'Dikembalikan' ||
+                                    order.returnSubmitted
                                 ? 'Sudah Dikembalikan'
                                 : 'Kembalikan Produk',
                           ),
