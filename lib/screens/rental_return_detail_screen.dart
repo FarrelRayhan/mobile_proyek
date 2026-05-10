@@ -23,8 +23,8 @@ class _RentalReturnDetailScreenState extends State<RentalReturnDetailScreen> {
   String _metodeReturn = 'antar';
   bool _isSubmitting = false;
 
-  Future<void> _pickImage() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery);
+  Future<void> _pickImage(ImageSource source) async {
+    final picked = await _picker.pickImage(source: source);
     if (picked != null) {
       setState(() => _image = File(picked.path));
     }
@@ -170,12 +170,23 @@ class _RentalReturnDetailScreenState extends State<RentalReturnDetailScreen> {
 
             const SizedBox(height: 20),
 
-            // UPLOAD DENDA
-            Text('Bukti Pembayaran Denda (Jika Ada)'),
+            // FOTO KONDISI BARANG
+            Text(
+              'Foto Kondisi Barang',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 6),
+            Text(
+              'Upload gambar kondisi barang sebelum dikembalikan.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 10),
 
             GestureDetector(
-              onTap: _pickImage,
+              onTap: () => _pickImage(ImageSource.gallery),
               child: Container(
                 height: 150,
                 width: double.infinity,
@@ -184,9 +195,29 @@ class _RentalReturnDetailScreenState extends State<RentalReturnDetailScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: _image == null
-                    ? const Center(child: Text('Upload gambar'))
+                    ? const Center(child: Text('Upload foto kondisi barang'))
                     : Image.file(_image!, fit: BoxFit.cover),
               ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickImage(ImageSource.gallery),
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: const Text('Galeri'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickImage(ImageSource.camera),
+                    icon: const Icon(Icons.camera_alt_outlined),
+                    label: const Text('Kamera'),
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 24),
