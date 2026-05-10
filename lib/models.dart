@@ -1,4 +1,5 @@
 // models.dart - All data models in one flat file
+import 'package:flutter/foundation.dart';
 
 class User {
   final String id;
@@ -8,6 +9,8 @@ class User {
   String avatarUrl;
   String address;
   String password;
+  String? ktpImage;
+  String? ktpVerifiedAt;
 
   User({
     required this.id,
@@ -17,7 +20,12 @@ class User {
     required this.avatarUrl,
     required this.address,
     this.password = 'password123',
+    this.ktpImage,
+    this.ktpVerifiedAt,
   });
+
+  bool get hasKtpUploaded => ktpImage != null && ktpImage!.isNotEmpty;
+  bool get isKtpVerified => ktpVerifiedAt != null && ktpVerifiedAt!.isNotEmpty;
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
@@ -28,6 +36,8 @@ class User {
       avatarUrl: json['avatar']?.toString() ?? json['avatar_url']?.toString() ?? 'https://i.pravatar.cc/150?img=3',
       address: json['address']?.toString() ?? json['alamat']?.toString() ?? '',
       password: '',
+      ktpImage: json['ktp_image']?.toString(),
+      ktpVerifiedAt: json['ktp_verified_at']?.toString(),
     );
   }
 
@@ -37,6 +47,8 @@ class User {
     String? avatarUrl,
     String? address,
     String? password,
+    String? ktpImage,
+    String? ktpVerifiedAt,
   }) {
     return User(
       id: id,
@@ -46,6 +58,8 @@ class User {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       address: address ?? this.address,
       password: password ?? this.password,
+      ktpImage: ktpImage ?? this.ktpImage,
+      ktpVerifiedAt: ktpVerifiedAt ?? this.ktpVerifiedAt,
     );
   }
 }
@@ -97,9 +111,25 @@ class Product {
       return int.tryParse(value.toString()) ?? 0;
     }
 
-    final sellerData = json['seller'] as Map<String, dynamic>? ?? {};
-    final categoryData = json['category'] as Map<String, dynamic>?;
-    final imageUrl = json['image']?.toString() ?? json['gambar']?.toString() ?? '';
+    String categoryName = toStringSafe(json['category']);
+    if (json['category'] is Map) {
+      categoryName = toStringSafe(json['category']['name']);
+    }
+
+    String sellerNameStr = toStringSafe(json['seller_name'] ?? json['store_name']);
+    String sellerCityStr = toStringSafe(json['seller_city'] ?? json['store_city']);
+    if (json['seller'] is Map) {
+      sellerNameStr = toStringSafe(json['seller']['name']) != '' ? toStringSafe(json['seller']['name']) : sellerNameStr;
+      sellerCityStr = toStringSafe(json['seller']['city']) != '' ? toStringSafe(json['seller']['city']) : sellerCityStr;
+    }
+
+    var imageUrl = json['image']?.toString() ?? json['gambar']?.toString() ?? '';
+    if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
+      // Normalize path and use backend public asset base URL, not /storage.
+      final cleanedPath = imageUrl.replaceAll('\\', '/').replaceAll(RegExp(r'/{2,}'), '/').replaceFirst(RegExp(r'^/'), '');
+      final baseUrl = kIsWeb ? 'http://127.0.0.1:8000/' : 'http://10.0.2.2:8000/';
+      imageUrl = '$baseUrl$cleanedPath';
+    }
     final isRentable = json['is_rental'] == 1 || json['is_rental'] == true || json['is_rentable'] == true;
 
     return Product(
@@ -108,28 +138,30 @@ class Product {
       description: toStringSafe(json['description'] ?? json['deskripsi']),
       price: toDouble(json['price'] ?? json['harga'] ?? json['buy_price']),
       rentalPrice: json['rent_price'] != null ? toDouble(json['rent_price']) : null,
-      imageUrl: imageUrl.isNotEmpty ? imageUrl : 'https://via.placeholder.com/400x300',
-      category: categoryData != null ? toStringSafe(categoryData['name']) : toStringSafe(json['category']),
+      imageUrl: imageUrl.isNotEmpty ? imageUrl : 'assets/images/meja-kayu-dengan-bangku-yang-dikelilingi-oleh-pegunungan-alpen-italia-yang-tertutup-tanaman-hijau-di-bawah-sinar-matahari_181624-28262.avif',
+      category: categoryName,
       rating: toDouble(json['rating'] ?? 0),
       reviewCount: toInt(json['reviews_count'] ?? json['reviewed_by'] ?? 0),
       isAvailable: (json['status']?.toString().toLowerCase() ?? '') == 'approved' || json['status'] == 1 || json['is_available'] == true,
       isRentable: isRentable,
-      sellerName: toStringSafe(sellerData['name'] ?? json['seller_name'] ?? json['store_name']),
-      sellerCity: toStringSafe(sellerData['city'] ?? json['seller_city'] ?? json['store_city']),
+      sellerName: sellerNameStr,
+      sellerCity: sellerCityStr,
       stock: toInt(json['stock'] ?? json['stok'] ?? 0),
     );
   }
 }
 
 class CartItem {
+  final String id;
   final Product product;
   int quantity;
 
-  CartItem({required this.product, this.quantity = 1});
+  CartItem({this.id = '', required this.product, this.quantity = 1});
 
   factory CartItem.fromJson(Map<String, dynamic> json) {
     final productJson = json['product'] as Map<String, dynamic>?;
     return CartItem(
+      id: json['id']?.toString() ?? '',
       product: Product.fromJson(productJson ?? {}),
       quantity: int.tryParse(json['qty']?.toString() ?? '1') ?? 1,
     );
@@ -273,6 +305,30 @@ class Review {
     required this.comment,
     required this.createdAt,
   });
+
+  factory Review.fromJson(Map<String, dynamic> json) {
+    double r = 0;
+    if (json['rating'] != null) {
+      if (json['rating'] is int) {
+        r = (json['rating'] as int).toDouble();
+      } else if (json['rating'] is double) {
+        r = json['rating'];
+      } else {
+        r = double.tryParse(json['rating'].toString()) ?? 0;
+      }
+    }
+    
+    return Review(
+      id: json['id']?.toString() ?? '',
+      userName: json['user_name']?.toString() ?? json['name']?.toString() ?? 'Pengguna',
+      avatarUrl: json['user_avatar']?.toString() ?? json['avatar']?.toString() ?? 'https://i.pravatar.cc/150?img=3',
+      rating: r,
+      comment: json['comment']?.toString() ?? '',
+      createdAt: json['created_at'] != null 
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now() 
+          : DateTime.now(),
+    );
+  }
 }
 
 class ChatMessage {
@@ -309,228 +365,7 @@ class RegionData {
   };
 }
 
-// Dummy Data
-class DummyData {
-  static User currentUser = User(
-    id: 'u1',
-    name: 'Budi Santoso',
-    email: 'budi@email.com',
-    phone: '081234567890',
-    avatarUrl: 'https://i.pravatar.cc/150?img=3',
-    address: 'Jl. Raya Bandung No. 12, Kota Bandung, Jawa Barat',
-    password: 'password123',
-  );
-
-  static final List<Product> products = [
-    const Product(
-      id: 'p1',
-      name: 'Tenda Camping 4 Orang',
-      description:
-          'Tenda camping waterproof dengan kapasitas 4 orang, mudah dipasang, ventilasi baik, dan bahan berkualitas tinggi untuk petualangan outdoor.',
-      price: 1200000,
-      rentalPrice: 85000,
-      imageUrl: 'https://images.unsplash.com/photo-1624923686627-514dd5e57bae?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8dGVudHxlbnwwfHwwfHx8MA%3D%3D',
-      category: 'Camping',
-      rating: 4.8,
-      reviewCount: 124,
-      isAvailable: true,
-      isRentable: true,
-      sellerName: 'Outdoor Adventure',
-      sellerCity: 'Bandung',
-      stock: 15,
-    ),
-    const Product(
-      id: 'p2',
-      name: 'Sleeping Bag Premium',
-      description:
-          'Sleeping bag hangat untuk camping, bahan fleece lembut, tahan dingin hingga -10°C, ringan dan mudah dibawa.',
-      price: 450000,
-      rentalPrice: 35000,
-      imageUrl: 'https://images.unsplash.com/photo-1558477280-1bfed08ea5db?q=80&w=688&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-      category: 'Camping',
-      rating: 4.7,
-      reviewCount: 89,
-      isAvailable: true,
-      isRentable: true,
-      sellerName: 'Camping Gear Store',
-      sellerCity: 'Jakarta',
-      stock: 20,
-    ),
-    const Product(
-      id: 'p3',
-      name: 'Kompor Portable Camping',
-      description:
-          'Kompor gas portable untuk camping, efisien bahan bakar, mudah menyala, dan aman digunakan di outdoor.',
-      price: 350000,
-      rentalPrice: null,
-      imageUrl: 'https://images.unsplash.com/photo-1773762159864-59966f6f82c7?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OHx8c3RvdmUlMjBwb3J0YWJsZXxlbnwwfHwwfHx8MA%3D%3D',
-      category: 'Camping',
-      rating: 4.6,
-      reviewCount: 56,
-      isAvailable: true,
-      isRentable: false,
-      sellerName: 'Outdoor Adventure',
-      sellerCity: 'Surabaya',
-      stock: 12,
-    ),
-    const Product(
-      id: 'p4',
-      name: 'Tas Backpack Hiking 60L',
-      description:
-          'Tas backpack hiking kapasitas 60L dengan sistem punggung ergonomis, banyak kompartemen, tahan air.',
-      price: 850000,
-      rentalPrice: 55000,
-      imageUrl: 'https://images.unsplash.com/photo-1622260614153-03223fb72052?w=400&h=300&fit=crop',
-      category: 'Hiking',
-      rating: 4.9,
-      reviewCount: 203,
-      isAvailable: true,
-      isRentable: true,
-      sellerName: 'Hiking Essentials',
-      sellerCity: 'Yogyakarta',
-      stock: 18,
-    ),
-    const Product(
-      id: 'p5',
-      name: 'Tongkat Hiking Trekking',
-      description:
-          'Tongkat trekking adjustable dari aluminium, anti-slip handle, ringan namun kuat untuk mendaki gunung.',
-      price: 250000,
-      rentalPrice: 15000,
-      imageUrl: 'https://images.unsplash.com/photo-1776006535249-a12975cb2269?q=80&w=1632&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-      category: 'Hiking',
-      rating: 4.5,
-      reviewCount: 87,
-      isAvailable: true,
-      isRentable: true,
-      sellerName: 'Mountain Gear',
-      sellerCity: 'Bandung',
-      stock: 25,
-    ),
-    const Product(
-      id: 'p6',
-      name: 'Jaket Hiking Waterproof',
-      description:
-          'Jaket hiking waterproof dan breathable, tahan angin, cocok untuk cuaca dingin dan hujan ringan saat hiking.',
-      price: 650000,
-      rentalPrice: 45000,
-      imageUrl: 'https://images.unsplash.com/photo-1641126324594-4526eaff068d?q=80&w=687&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-      category: 'Hiking',
-      rating: 4.8,
-      reviewCount: 145,
-      isAvailable: true,
-      isRentable: true,
-      sellerName: 'Outdoor Adventure',
-      sellerCity: 'Jakarta',
-      stock: 10,
-    ),
-    const Product(
-      id: 'p7',
-      name: 'Lampu Camping LED',
-      description:
-          'Lampu LED portable untuk camping dengan brightness tinggi, rechargeable battery, tahan air.',
-      price: 180000,
-      rentalPrice: null,
-      imageUrl: 'https://images.unsplash.com/photo-1637013369304-191aa2b51232?q=80&w=688&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-      category: 'Camping',
-      rating: 4.4,
-      reviewCount: 78,
-      isAvailable: true,
-      isRentable: false,
-      sellerName: 'Camping Gear Store',
-      sellerCity: 'Surabaya',
-      stock: 30,
-    ),
-    const Product(
-      id: 'p8',
-      name: 'Sepatu Hiking Outdoor',
-      description:
-          'Sepatu hiking anti-air dengan sol grip kuat, nyaman dan tahan lama untuk medan berbatu.',
-      price: 750000,
-      rentalPrice: null,
-      imageUrl: 'https://images.unsplash.com/photo-1520219306100-ec4afeeefe58?w=400&h=300&fit=crop',
-      category: 'Hiking',
-      rating: 4.7,
-      reviewCount: 112,
-      isAvailable: true,
-      isRentable: false,
-      sellerName: 'Mountain Gear',
-      sellerCity: 'Yogyakarta',
-      stock: 14,
-    ),
-  ];
-
-  static final List<Order> orders = [
-    Order(
-      id: 'ORD-001',
-      items: [CartItem(product: products[0], quantity: 1)],
-      total: 3500000,
-      status: 'Dikirim',
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      courier: 'JNE',
-      trackingNumber: 'JNE123456789',
-      address: 'Jl. Raya Bandung No. 12',
-    ),
-    Order(
-      id: 'ORD-002',
-      items: [CartItem(product: products[2], quantity: 1)],
-      total: 22000000,
-      status: 'Selesai',
-      createdAt: DateTime.now().subtract(const Duration(days: 10)),
-      courier: 'TIKI',
-      trackingNumber: 'TIKI987654321',
-      address: 'Jl. Raya Bandung No. 12',
-    ),
-    Order(
-      id: 'ORD-003',
-      items: [
-        CartItem(product: products[3], quantity: 1),
-        CartItem(product: products[4], quantity: 1),
-      ],
-      total: 10700000,
-      status: 'Diproses',
-      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-      courier: 'SiCepat',
-      trackingNumber: 'SC246813579',
-      address: 'Jl. Raya Bandung No. 12',
-    ),
-  ];
-
-  static final List<Review> reviews = [
-    Review(
-      id: 'r1',
-      userName: 'Andi Wijaya',
-      avatarUrl: 'https://i.pravatar.cc/50?img=7',
-      rating: 5,
-      comment: 'Produk sangat bagus! Sesuai deskripsi dan pengiriman cepat. Sangat puas!',
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-    Review(
-      id: 'r2',
-      userName: 'Siti Rahayu',
-      avatarUrl: 'https://i.pravatar.cc/50?img=15',
-      rating: 4,
-      comment: 'Kualitas oke, packing rapi. Minus sedikit di warna yg agak beda dari foto.',
-      createdAt: DateTime.now().subtract(const Duration(days: 7)),
-    ),
-    Review(
-      id: 'r3',
-      userName: 'Dika Pratama',
-      avatarUrl: 'https://i.pravatar.cc/50?img=12',
-      rating: 5,
-      comment: 'Top banget! Recommended seller, responsif dan produk original.',
-      createdAt: DateTime.now().subtract(const Duration(days: 14)),
-    ),
-  ];
-
-  static final List<String> categories = [
-    'Semua', 'Camping', 'Hiking'
-  ];
-
-  static final List<String> couriers = [
-    'JNE', 'TIKI', 'SiCepat', 'Anteraja', 'J&T Express', 'GoSend', 'GrabExpress'
-  ];
-
+class CurrencyFormat {
   static String formatPrice(double price) {
     if (price >= 1000000) {
       return 'Rp ${(price / 1000000).toStringAsFixed(1)}jt';
@@ -540,4 +375,10 @@ class DummyData {
       (m) => '${m[1]}.',
     )}';
   }
+}
+
+class AppConstants {
+  static final List<String> couriers = [
+    'JNE', 'TIKI', 'SiCepat', 'Anteraja', 'J&T Express', 'GoSend', 'GrabExpress'
+  ];
 }

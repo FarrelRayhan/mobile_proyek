@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
 import 'other_screens.dart';
@@ -13,14 +12,14 @@ class PaymentProofUploadScreen extends StatefulWidget {
 }
 
 class PaymentProofUploadScreenState extends State<PaymentProofUploadScreen> {
-  File? _image;
+  XFile? _image;
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _pickImage(ImageSource source) async {
     final pickedFile = await _picker.pickImage(source: source);
     if (pickedFile != null) {
       setState(() {
-        _image = File(pickedFile.path);
+        _image = pickedFile;
       });
     }
   }
@@ -30,7 +29,7 @@ class PaymentProofUploadScreenState extends State<PaymentProofUploadScreen> {
       final messenger = ScaffoldMessenger.of(context);
       final state = Provider.of<AppState>(context, listen: false);
       final address = state.currentUser?.address ?? 'Alamat tidak tersedia';
-      final error = await state.placeOrder('JNE', address);
+      final error = await state.placeOrder('JNE', address, paymentProofFile: _image);
       if (!mounted) return;
       if (error != null) {
         messenger.showSnackBar(
@@ -74,7 +73,7 @@ class PaymentProofUploadScreenState extends State<PaymentProofUploadScreen> {
             ),
             SizedBox(height: 20),
             _image != null
-                ? Image.file(_image!, height: 200, fit: BoxFit.cover)
+                ? Image.network(_image!.path, height: 200, fit: BoxFit.cover)
                 : Container(
                     height: 200,
                     color: Colors.grey[300],

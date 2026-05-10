@@ -1,6 +1,7 @@
 // widgets.dart - All reusable widgets
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'theme.dart';
 import 'models.dart';
 
@@ -49,18 +50,20 @@ class ProductCard extends StatelessWidget {
                 ClipRRect(
                   borderRadius:
                       const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: Image.network(
-                    product.imageUrl,
-                    height: 90, // FIX: was 100
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      height: 90, // FIX: was 100
-                      color: AppTheme.primary.withOpacity(0.1),
-                      child: const Icon(Icons.image_outlined,
-                          color: AppTheme.primary, size: 36),
-                    ),
-                  ),
+                  child: product.imageUrl.startsWith('assets/')
+                      ? Image.asset(
+                          product.imageUrl,
+                          height: 90, // FIX: was 100
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 90, // FIX: was 100
+                            color: AppTheme.primary.withOpacity(0.1),
+                            child: const Icon(Icons.image_outlined,
+                                color: AppTheme.primary, size: 36),
+                          ),
+                        )
+                      : _buildNetworkImage(product.imageUrl),
                 ),
                 // Favorite button
                 Positioned(
@@ -168,7 +171,7 @@ class ProductCard extends StatelessWidget {
                         ),
                         Expanded(
                           child: Text(
-                            DummyData.formatPrice(product.price),
+                            CurrencyFormat.formatPrice(product.price),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
@@ -192,7 +195,7 @@ class ProductCard extends StatelessWidget {
                         ),
                         Expanded(
                           child: Text(
-                            '${DummyData.formatPrice(product.rentalPrice ?? 0)}/hari',
+                            '${CurrencyFormat.formatPrice(product.rentalPrice ?? 0)}/hari',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -251,6 +254,58 @@ class ProductCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNetworkImage(String imageUrl) {
+    print('[ProductCard] Loading image: $imageUrl');
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      height: 90,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      memCacheHeight: 200,
+      memCacheWidth: 200,
+      httpHeaders: const {
+        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+      },
+      placeholder: (context, url) => Container(
+        height: 90,
+        color: AppTheme.primary.withOpacity(0.1),
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation(AppTheme.primary),
+            ),
+          ),
+        ),
+      ),
+      errorWidget: (context, url, error) {
+        print('[ProductCard] Image failed: $url');
+        print('[ProductCard] Error: $error');
+        return Container(
+          height: 90,
+          color: AppTheme.primary.withOpacity(0.1),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.image_outlined,
+                  color: AppTheme.primary, size: 24),
+              const SizedBox(height: 4),
+              Text(
+                'Gagal memuat',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 8,
+                  color: AppTheme.textLight,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

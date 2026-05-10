@@ -181,7 +181,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                   Row(
                     children: [
                       Text(
-                        DummyData.formatPrice(p.price),
+                        CurrencyFormat.formatPrice(p.price),
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 24,
                           fontWeight: FontWeight.w800,
@@ -198,7 +198,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            'Sewa: ${DummyData.formatPrice(p.rentalPrice!)}/hari',
+                            'Sewa: ${CurrencyFormat.formatPrice(p.rentalPrice!)}/hari',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -335,58 +335,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                           ],
                         ),
                         // Reviews
-                        ListView.separated(
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: DummyData.reviews.length,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 16),
-                          itemBuilder: (_, i) {
-                            final r = DummyData.reviews[i];
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundImage:
-                                      NetworkImage(r.avatarUrl),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            r.userName,
-                                            style:
-                                                GoogleFonts.plusJakartaSans(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 13,
-                                              color: AppTheme.textPrimary,
-                                            ),
-                                          ),
-                                          StarRating(
-                                              rating: r.rating, size: 14),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        r.comment,
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 13,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
+                        const EmptyState(
+                          icon: Icons.rate_review_outlined,
+                          title: 'Belum ada ulasan',
+                          subtitle: 'Jadilah yang pertama memberikan ulasan untuk produk ini.',
                         ),
                       ],
                     ),
@@ -725,7 +677,7 @@ class _RentalBottomSheetState extends State<_RentalBottomSheet> {
                   ),
                 ),
                 Text(
-                  DummyData.formatPrice(total),
+                  CurrencyFormat.formatPrice(total),
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 18,
                     fontWeight: FontWeight.w800,

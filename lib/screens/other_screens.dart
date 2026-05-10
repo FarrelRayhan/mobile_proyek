@@ -1,7 +1,9 @@
 // other_screens.dart - KF-15, KF-16, KF-17, KF-18, KF-19, KF-22, KF-23
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme.dart';
 import '../app_state.dart';
 import '../models.dart';
@@ -128,7 +130,7 @@ class _OrderCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          '${item.quantity}x • ${DummyData.formatPrice(item.product.price)}',
+                          '${item.quantity}x • ${CurrencyFormat.formatPrice(item.product.price)}',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
                             color: AppTheme.textSecondary,
@@ -173,7 +175,7 @@ class _OrderCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    DummyData.formatPrice(order.total),
+                    CurrencyFormat.formatPrice(order.total),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -234,6 +236,7 @@ class _OrderCard extends StatelessWidget {
   void _showReviewDialog(BuildContext context, Order order) {
     double _rating = 5;
     final _ctrl = TextEditingController();
+    bool _isSubmitting = false;
 
     showDialog(
       context: context,
@@ -289,21 +292,48 @@ class _OrderCard extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Ulasan berhasil dikirim!',
-                              style: GoogleFonts.plusJakartaSans()),
-                          backgroundColor: AppTheme.success,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          margin: const EdgeInsets.all(16),
-                        ),
-                      );
+                    onPressed: _isSubmitting ? null : () async {
+                      setState(() => _isSubmitting = true);
+                      final state = context.read<AppState>();
+                      bool success = true;
+
+                      for (var item in order.items) {
+                        final error = await state.submitReview(
+                          orderId: order.id,
+                          productId: item.product.id,
+                          rating: _rating.toInt(),
+                          comment: _ctrl.text,
+                        );
+                        if (error != null && error != 'The order id has already been taken.') {
+                          // Ignore if already reviewed (some APIs return duplicate error)
+                          success = false;
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+                          }
+                          break;
+                        }
+                      }
+
+                      if (success && context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Ulasan berhasil dikirim!',
+                                style: GoogleFonts.plusJakartaSans()),
+                            backgroundColor: AppTheme.success,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            margin: const EdgeInsets.all(16),
+                          ),
+                        );
+                      } else if (context.mounted) {
+                        setState(() => _isSubmitting = false);
+                      }
                     },
-                    child: const Text('Kirim Ulasan'),
+                    child: _isSubmitting 
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Kirim Ulasan'),
                   ),
                 ),
               ],
@@ -375,7 +405,7 @@ class CheckoutScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '${item.quantity}x ${DummyData.formatPrice(item.product.price)}',
+                              '${item.quantity}x ${CurrencyFormat.formatPrice(item.product.price)}',
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 12,
                                 color: AppTheme.textSecondary,
@@ -385,7 +415,7 @@ class CheckoutScreen extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        DummyData.formatPrice(item.total),
+                        CurrencyFormat.formatPrice(item.total),
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -465,7 +495,7 @@ class CheckoutScreen extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      DummyData.formatPrice(total),
+                      CurrencyFormat.formatPrice(total),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -609,6 +639,61 @@ class ProfileScreen extends StatelessWidget {
                       color: Colors.white.withOpacity(0.8),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  // KTP Status Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: user.isKtpVerified
+                          ? AppTheme.success.withOpacity(0.2)
+                          : user.hasKtpUploaded
+                              ? AppTheme.warning.withOpacity(0.2)
+                              : Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: user.isKtpVerified
+                            ? AppTheme.success.withOpacity(0.5)
+                            : user.hasKtpUploaded
+                                ? AppTheme.warning.withOpacity(0.5)
+                                : Colors.white.withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          user.isKtpVerified
+                              ? Icons.verified
+                              : user.hasKtpUploaded
+                                  ? Icons.hourglass_empty
+                                  : Icons.badge_outlined,
+                          size: 14,
+                          color: user.isKtpVerified
+                              ? AppTheme.success
+                              : user.hasKtpUploaded
+                                  ? AppTheme.warning
+                                  : Colors.white,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          user.isKtpVerified
+                              ? 'KTP Terverifikasi'
+                              : user.hasKtpUploaded
+                                  ? 'KTP Menunggu Verifikasi'
+                                  : 'KTP Belum Diunggah',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: user.isKtpVerified
+                                ? AppTheme.success
+                                : user.hasKtpUploaded
+                                    ? AppTheme.warning
+                                    : Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   // Stats
                   Row(
@@ -643,6 +728,14 @@ class ProfileScreen extends StatelessWidget {
                                 context,
                                 MaterialPageRoute(
                                     builder: (_) => const EditProfileScreen()),
+                              )),
+                      _MenuItem(
+                          icon: Icons.badge_outlined,
+                          label: 'Verifikasi KTP',
+                          onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const KtpUploadScreen()),
                               )),
                       _MenuItem(
                           icon: Icons.location_on_outlined,
@@ -1354,7 +1447,7 @@ class InvoiceScreen extends StatelessWidget {
                                     ),
                                   ),
                                   Text(
-                                    '${item.quantity}x • ${DummyData.formatPrice(item.product.price)}',
+                                    '${item.quantity}x • ${CurrencyFormat.formatPrice(item.product.price)}',
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 12,
                                       color: AppTheme.textSecondary,
@@ -1364,7 +1457,7 @@ class InvoiceScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              DummyData.formatPrice(item.total),
+                              CurrencyFormat.formatPrice(item.total),
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -1397,7 +1490,7 @@ class InvoiceScreen extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    DummyData.formatPrice(order.total),
+                    CurrencyFormat.formatPrice(order.total),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
@@ -1969,6 +2062,228 @@ class _ArticleDetailScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── KTP Upload Screen ───────────────────────────────────────────────────────
+class KtpUploadScreen extends StatefulWidget {
+  const KtpUploadScreen({super.key});
+
+  @override
+  State<KtpUploadScreen> createState() => _KtpUploadScreenState();
+}
+
+class _KtpUploadScreenState extends State<KtpUploadScreen> {
+  XFile? _ktpFile;
+  bool _isLoading = false;
+  final _picker = ImagePicker();
+
+  Future<void> _pickImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (pickedFile != null) {
+      setState(() {
+        _ktpFile = pickedFile;
+      });
+    }
+  }
+
+  Future<void> _uploadKtp() async {
+    if (_ktpFile == null) return;
+    setState(() => _isLoading = true);
+    
+    final state = context.read<AppState>();
+    final error = await state.uploadUserKtp(_ktpFile!);
+    
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: AppTheme.error));
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('KTP berhasil diunggah dan sedang menunggu verifikasi.', style: GoogleFonts.plusJakartaSans()),
+        backgroundColor: AppTheme.success,
+      )
+    );
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AppState>().currentUser;
+
+    return Scaffold(
+      backgroundColor: AppTheme.surface,
+      appBar: AppBar(
+        title: const Text('Verifikasi KTP'),
+        backgroundColor: Colors.white,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            Icon(Icons.shield_outlined, size: 80, color: AppTheme.primary),
+            const SizedBox(height: 16),
+            Text(
+              'Verifikasi Identitas',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Unggah foto KTP untuk keamanan transaksi penyewaan dan pembelian Anda di Campify.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                color: AppTheme.textSecondary,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 32),
+            if (user != null && user.isKtpVerified)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.success),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.verified, color: AppTheme.success, size: 48),
+                    const SizedBox(height: 16),
+                    Text(
+                      'KTP Terverifikasi',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.success,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Identitas Anda telah diverifikasi oleh tim kami.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (user != null && user.hasKtpUploaded && _ktpFile == null)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.warning),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.hourglass_empty, color: AppTheme.warning, size: 48),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Menunggu Verifikasi',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Foto KTP Anda telah diunggah dan sedang dalam proses verifikasi oleh tim Admin. Anda masih bisa mengganti foto KTP jika diperlukan.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _pickImage,
+                        child: const Text('Ganti Foto KTP'),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Column(
+                children: [
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(
+                      width: double.infinity,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppTheme.primary.withOpacity(0.3),
+                          width: 2,
+                          style: BorderStyle.solid,
+                        ),
+                      ),
+                      child: _ktpFile != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Image.file(
+                                File(_ktpFile!.path),
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo_outlined, size: 48, color: AppTheme.primary.withOpacity(0.5)),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Tap untuk memilih foto KTP',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 14,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: (_ktpFile == null || _isLoading) ? null : _uploadKtp,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text('Unggah KTP Sekarang'),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }

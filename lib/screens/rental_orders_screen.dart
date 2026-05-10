@@ -198,7 +198,7 @@ class _RentalOrderCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    DummyData.formatPrice(order.total),
+                    CurrencyFormat.formatPrice(order.total),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,

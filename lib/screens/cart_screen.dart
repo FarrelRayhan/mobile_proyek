@@ -80,7 +80,7 @@ class CartScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            DummyData.formatPrice(state.cartTotal),
+                            CurrencyFormat.formatPrice(state.cartTotal),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -100,7 +100,7 @@ class CartScreen extends StatelessWidget {
                             ),
                           ),
                           child: Text(
-                              'Lanjut ke Checkout • ${DummyData.formatPrice(state.cartTotal)}'),
+                              'Lanjut ke Checkout • ${CurrencyFormat.formatPrice(state.cartTotal)}'),
                         ),
                       ),
                     ],
@@ -170,7 +170,7 @@ class _CartItemCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  DummyData.formatPrice(item.product.price),
+                  CurrencyFormat.formatPrice(item.product.price),
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -208,7 +208,7 @@ class _CartItemCard extends StatelessWidget {
                     ),
                     // Total
                     Text(
-                      DummyData.formatPrice(item.total),
+                      CurrencyFormat.formatPrice(item.total),
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -494,7 +494,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               title: 'Jasa Pengiriman',
               icon: Icons.local_shipping_outlined,
               child: Column(
-                children: DummyData.couriers.map((c) {
+                children: AppConstants.couriers.map((c) {
                   final cost = _getCost(c);
                   return GestureDetector(
                     onTap: () => setState(() => _selectedCourier = c),
@@ -536,7 +536,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                           ),
                           Text(
-                            DummyData.formatPrice(cost),
+                            CurrencyFormat.formatPrice(cost),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -739,7 +739,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   child: CircularProgressIndicator(
                       color: Colors.white, strokeWidth: 2),
                 )
-              : Text('Bayar ${DummyData.formatPrice(total)}'),
+              : Text('Bayar ${CurrencyFormat.formatPrice(total)}'),
         ),
       ),
     );
@@ -750,13 +750,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final navigator = Navigator.of(context);
     setState(() => _loading = true);
     final shippingAddress = '${_addressCtrl.text.trim()}, $_selectedDistrict, $_selectedCity';
+    
+    // Map UI payment method to API accepted values
+    String apiPaymentMethod = 'transfer';
+    if (_selectedPayment == 'COD') {
+      apiPaymentMethod = 'cod';
+    }
+
     final error = await state.placeOrder(
       _selectedCourier,
       shippingAddress,
       city: _selectedCity,
       district: _selectedDistrict,
-      paymentMethod: _selectedPayment,
-      paymentProof: _paymentProof?.path,
+      paymentMethod: apiPaymentMethod,
+      paymentProofFile: _paymentProof,
     );
     if (!mounted) return;
     setState(() => _loading = false);
@@ -861,7 +868,7 @@ class _SummaryRow extends StatelessWidget {
             ),
           ),
           Text(
-            DummyData.formatPrice(value),
+            CurrencyFormat.formatPrice(value),
             style: GoogleFonts.plusJakartaSans(
               fontSize: isTotal ? 18 : 13,
               fontWeight: FontWeight.w700,

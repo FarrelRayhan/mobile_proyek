@@ -1,5 +1,7 @@
 // app_state.dart - Simple state management with ChangeNotifier
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'models.dart';
 import 'services/api_service.dart';
 
@@ -15,12 +17,31 @@ class AppState extends ChangeNotifier {
   String _selectedCategory = 'Semua';
   String _searchQuery = '';
 
+  List<String> _categories = ['Semua'];
+
   AppState() {
     _loadInitialData();
   }
 
   Future<void> _loadInitialData() async {
-    await fetchProducts();
+    await ApiService.init();
+    
+    try {
+      _currentUser = await ApiService.getMe();
+      _isLoggedIn = true;
+    } catch (e) {
+      _isLoggedIn = false;
+      _currentUser = null;
+    }
+
+    await Future.wait([
+      fetchCategories(),
+      fetchProducts(),
+      if (_isLoggedIn) fetchCart(),
+      if (_isLoggedIn) fetchWishlist(),
+      if (_isLoggedIn) fetchOrders(),
+    ]);
+    notifyListeners();
   }
 
   bool get isLoggedIn => _isLoggedIn;
@@ -34,15 +55,7 @@ class AppState extends ChangeNotifier {
   String get selectedCategory => _selectedCategory;
   String get searchQuery => _searchQuery;
 
-  List<String> get categories {
-    final categories = _products
-        .map((product) => product.category)
-        .where((category) => category.isNotEmpty)
-        .toSet()
-        .toList();
-    categories.sort();
-    return ['Semua', ...categories];
-  }
+  List<String> get categories => _categories;
 
   int get cartCount => _cartItems.fold(0, (sum, item) => sum + item.quantity);
   double get cartTotal => _cartItems.fold(0, (sum, item) => sum + item.total);
@@ -54,7 +67,11 @@ class AppState extends ChangeNotifier {
       final user = await ApiService.login(email, password);
       _isLoggedIn = true;
       _currentUser = user;
-      await fetchOrders();
+      await Future.wait([
+        fetchCart(),
+        fetchWishlist(),
+        fetchOrders(),
+      ]);
       notifyListeners();
       return null;
     } catch (error) {
@@ -79,6 +96,8 @@ class AppState extends ChangeNotifier {
       _isLoggedIn = true;
       _currentUser = user;
       _orders = [];
+      _cartItems = [];
+      _favorites = [];
       notifyListeners();
       return null;
     } catch (error) {
@@ -86,29 +105,45 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void addToCart(Product product) {
-    final existing = _cartItems.where((i) => i.product.id == product.id);
-    if (existing.isNotEmpty) {
-      existing.first.quantity++;
-    } else {
-      _cartItems.add(CartItem(product: product));
-    }
-    notifyListeners();
-  }
-
-  void removeFromCart(String productId) {
-    _cartItems.removeWhere((i) => i.product.id == productId);
-    notifyListeners();
-  }
-
-  void updateCartQuantity(String productId, int quantity) {
-    final item = _cartItems.firstWhere((i) => i.product.id == productId);
-    if (quantity <= 0) {
-      removeFromCart(productId);
-    } else {
-      item.quantity = quantity;
+  Future<void> fetchCart() async {
+    try {
+      _cartItems = await ApiService.getCart();
       notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> fetchWishlist() async {
+    try {
+      _favorites = await ApiService.getWishlist();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> addToCart(Product product) async {
+    try {
+      await ApiService.addToCart(product.id, 1);
+      await fetchCart();
+    } catch (_) {}
+  }
+
+  Future<void> removeFromCart(String productId) async {
+    try {
+      final item = _cartItems.firstWhere((i) => i.product.id == productId);
+      await ApiService.removeFromCart(item.id);
+      await fetchCart();
+    } catch (_) {}
+  }
+
+  Future<void> updateCartQuantity(String productId, int quantity) async {
+    if (quantity <= 0) {
+      await removeFromCart(productId);
+      return;
     }
+    try {
+      final item = _cartItems.firstWhere((i) => i.product.id == productId);
+      await ApiService.updateCart(item.id, quantity);
+      await fetchCart();
+    } catch (_) {}
   }
 
   void clearCart() {
@@ -151,7 +186,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> placeRentalOrder(String address) async {
+  Future<String?> placeRentalOrder(
+    String address, {
+    String? courier,
+    String? paymentMethod,
+    String? phone,
+    String? receiverName,
+    XFile? paymentProofFile,
+    XFile? ktpFile,
+  }) async {
     if (_rentalCartItems.isEmpty) {
       return 'Keranjang sewa kosong.';
     }
@@ -162,15 +205,21 @@ class AppState extends ChangeNotifier {
 
     try {
       final newOrder = await ApiService.createOrder(
-        courier: 'JNE',
+        courier: courier ?? 'JNE',
         address: address,
-        phone: _currentUser!.phone.isNotEmpty
-            ? _currentUser!.phone
-            : '081234567890',
-        receiverName: _currentUser!.name,
-        paymentMethod: 'transfer',
-        items: _rentalCartItems
-            .map((item) => CartItem(product: item.product, quantity: item.quantity))
+        phone: phone ?? (_currentUser!.phone.isNotEmpty ? _currentUser!.phone : '081234567890'),
+        receiverName: receiverName ?? _currentUser!.name,
+        paymentMethod: paymentMethod ?? 'transfer',
+        paymentProofFile: paymentProofFile,
+        ktpFile: ktpFile,
+        itemsPayload: _rentalCartItems
+            .map((item) => {
+                  'product_id': item.product.id,
+                  'qty': item.quantity,
+                  'type': 'rent',
+                  'duration': item.rentalDays,
+                  'start_date': item.rentalStartDate.toIso8601String().split('T')[0],
+                })
             .toList(),
       );
       _orders.insert(0, newOrder);
@@ -216,13 +265,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleFavorite(Product product) {
-    if (_favorites.any((p) => p.id == product.id)) {
-      _favorites.removeWhere((p) => p.id == product.id);
-    } else {
-      _favorites.add(product);
-    }
-    notifyListeners();
+  Future<void> toggleFavorite(Product product) async {
+    try {
+      await ApiService.toggleWishlist(product.id);
+      await fetchWishlist();
+    } catch (_) {}
   }
 
   bool isFavorite(String productId) => _favorites.any((p) => p.id == productId);
@@ -260,13 +307,20 @@ class AppState extends ChangeNotifier {
     return _products.where((p) => !p.isRentable && p.isAvailable).toList();
   }
 
+  Future<void> fetchCategories() async {
+    try {
+      _categories = await ApiService.fetchCategories();
+      notifyListeners();
+    } catch (_) {}
+  }
+
   Future<String?> fetchProducts({String? category, String? search}) async {
     try {
       _products = await ApiService.fetchProducts(category: category, search: search);
       notifyListeners();
       return null;
     } catch (error) {
-      _products = DummyData.products;
+      _products = [];
       notifyListeners();
       return error.toString();
     }
@@ -295,7 +349,7 @@ class AppState extends ChangeNotifier {
     String? city,
     String? district,
     String? paymentMethod,
-    String? paymentProof,
+    XFile? paymentProofFile,
   }) async {
     if (_cartItems.isEmpty) {
       return 'Keranjang kosong.';
@@ -314,13 +368,19 @@ class AppState extends ChangeNotifier {
             : '081234567890',
         receiverName: _currentUser!.name,
         paymentMethod: paymentMethod ?? 'transfer',
-        items: _cartItems,
+        itemsPayload: _cartItems
+            .map((item) => {
+                  'product_id': item.product.id,
+                  'qty': item.quantity,
+                  'type': 'buy',
+                })
+            .toList(),
         shippingCity: city,
         shippingDistrict: district,
-        paymentProof: paymentProof,
+        paymentProofFile: paymentProofFile,
       );
-      if (paymentProof != null) {
-        newOrder = newOrder.copyWith(paymentProof: paymentProof);
+      if (paymentProofFile != null) {
+        newOrder = newOrder.copyWith(paymentProof: paymentProofFile.path);
       }
       _orders.insert(0, newOrder);
       clearCart();
@@ -392,5 +452,40 @@ class AppState extends ChangeNotifier {
       return true;
     }
     return false;
+  }
+
+  Future<String?> submitReview({
+    required String orderId,
+    required String productId,
+    required int rating,
+    String? comment,
+  }) async {
+    try {
+      await ApiService.submitProductReview(
+        orderId: orderId,
+        productId: productId,
+        rating: rating,
+        comment: comment,
+      );
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> uploadUserKtp(XFile ktpFile) async {
+    try {
+      final data = await ApiService.uploadKtp(ktpFile);
+      if (_currentUser != null) {
+        _currentUser = _currentUser!.copyWith(
+          ktpImage: data['ktp_image'],
+          ktpVerifiedAt: data['ktp_verified_at'],
+        );
+        notifyListeners();
+      }
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
   }
 }

@@ -78,7 +78,7 @@ class RentalCartScreen extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            DummyData.formatPrice(state.rentalCartTotal),
+                            CurrencyFormat.formatPrice(state.rentalCartTotal),
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -98,7 +98,7 @@ class RentalCartScreen extends StatelessWidget {
                             ),
                           ),
                           child: Text(
-                              'Lanjut ke Checkout Sewa • ${DummyData.formatPrice(state.rentalCartTotal)}'),
+                              'Lanjut ke Checkout Sewa • ${CurrencyFormat.formatPrice(state.rentalCartTotal)}'),
                         ),
                       ),
                     ],
@@ -171,7 +171,7 @@ class _RentalCartItemCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${DummyData.formatPrice(item.product.rentalPrice ?? 0)}/hari',
+                      '${CurrencyFormat.formatPrice(item.product.rentalPrice ?? 0)}/hari',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -250,7 +250,7 @@ class _RentalCartItemCard extends StatelessWidget {
                 ],
               ),
               Text(
-                DummyData.formatPrice(item.total),
+                CurrencyFormat.formatPrice(item.total),
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -405,7 +405,7 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
                     ),
                   ),
                   Text(
-                    DummyData.formatPrice(item.total),
+                    CurrencyFormat.formatPrice(item.total),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -602,7 +602,7 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
                         ),
                       ),
                       Text(
-                        DummyData.formatPrice(state.rentalCartTotal),
+                        CurrencyFormat.formatPrice(state.rentalCartTotal),
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
@@ -638,7 +638,7 @@ class _RentalCheckoutScreenState extends State<RentalCheckoutScreen> {
                     const SnackBar(content: Text('Pesanan sewa berhasil dibuat!')),
                   );
                 },
-                child: Text('Buat Pesanan Sewa • ${DummyData.formatPrice(state.rentalCartTotal)}'),
+                child: Text('Buat Pesanan Sewa • ${CurrencyFormat.formatPrice(state.rentalCartTotal)}'),
               ),
             ),
           ],
