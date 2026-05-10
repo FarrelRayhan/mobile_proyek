@@ -1,4 +1,4 @@
-// rental_cart_screen.dart - Screen for rental cart
+// rental_cart_screen.dart - Screen for rental cart buat parels
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
